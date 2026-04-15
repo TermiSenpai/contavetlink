@@ -11,7 +11,8 @@ bp = Blueprint('mappings', __name__, url_prefix='/mappings')
 
 @bp.get('/clientes')
 def clientes_index():
-    return render_template('mappings_clientes.html')
+    # progreso/clientes se rellenan en Fase 2 cuando exista el CRUD de mappings.
+    return render_template('mappings_clientes.html', clientes=[], progreso={})
 
 
 @bp.post('/clientes/<codigo>')

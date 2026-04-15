@@ -4,10 +4,9 @@ Las fixtures que requieren DBFs reales viven en `tests/integration/conftest.py`.
 """
 from __future__ import annotations
 
-import os
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
@@ -34,11 +33,17 @@ def db_conn() -> Iterator[sqlite3.Connection]:
 
 @pytest.fixture
 def app():
-    """App Flask en modo testing con SQLite en memoria."""
-    from app import create_app
-    from app.config import TestingConfig
+    """App Flask en modo testing con SQLite en fichero tmp aislado por test.
 
-    flask_app = create_app(TestingConfig)
+    No usamos `:memory:` porque cada `sqlite3.connect()` crea una base
+    independiente en memoria — `init_db` y los handlers de request acabarían
+    viendo esquemas distintos. La fixture autouse redirige `APP_DATA_DIR` a
+    un `tmp_path` por test, así que el fichero queda totalmente aislado.
+    """
+    from app import create_app
+    from app.config import get_config
+
+    flask_app = create_app(get_config('testing'))
     flask_app.config['TESTING'] = True
     yield flask_app
 
@@ -50,8 +55,21 @@ def client(app):
 
 @pytest.fixture
 def data_dev_dir() -> Path:
-    """Devuelve la ruta al DATA_DEV local. Si no existe, skip del test."""
-    path = Path(__file__).parent / 'data' / 'DATA_DEV'
-    if not path.exists() or not any(path.iterdir()):
-        pytest.skip("tests/data/DATA_DEV/ vacío — generar con scripts/generate_dev_data.py")
-    return path
+    """Devuelve la ruta al DATA_DEV local. Si no existe, skip del test.
+
+    Busca en orden:
+      1. <project_root>/DATA_DEV   (carpeta principal usada en dev)
+      2. <repo>/tests/data/DATA_DEV  (alternativa para datos sintéticos)
+    """
+    project_root = Path(__file__).resolve().parent.parent
+    candidates = [
+        project_root / 'DATA_DEV',
+        project_root / 'tests' / 'data' / 'DATA_DEV',
+    ]
+    for path in candidates:
+        if path.is_dir() and any(path.iterdir()):
+            return path
+    pytest.skip(
+        "DATA_DEV/ no encontrado — coloca DBFs en ./DATA_DEV o "
+        "genera sintéticos con scripts/generate_dev_data.py"
+    )

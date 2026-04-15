@@ -4,6 +4,8 @@
 - Versionado de esquema en la tabla `config` (clave `schema_version`)
 - Migraciones automáticas al arrancar
 - Conexión por request (g.db) — cerrada en teardown
+- API key/value sobre la tabla `config` para que el resto de la app
+  (rutas, fuentes, exporter) lea ajustes editables por el usuario
 """
 from __future__ import annotations
 
@@ -13,9 +15,40 @@ from pathlib import Path
 
 from flask import Flask, g
 
-from app.config import SCHEMA_VERSION
+from app.config import SCHEMA_VERSION, project_root
 
 log = logging.getLogger(__name__)
+
+# ─── Claves de la tabla `config` (single source of truth) ───────────────────
+# Editables por el usuario desde la UI (/config). Cualquier código que necesite
+# uno de estos valores DEBE leerlo con `get_setting()` — nunca hardcodear.
+
+SETTING_DBF_PATH = 'dbf_path'
+SETTING_EXPORTS_PATH = 'exports_path'
+SETTING_CUENTA_VENTAS_DEF = 'cuenta_ventas_def'
+SETTING_EJERCICIO = 'ejercicio'
+SETTING_COD_EMPRESA = 'cod_empresa'
+SETTING_IMPORTE_FORMATO = 'importe_formato'
+SETTING_SCHEMA_VERSION = 'schema_version'
+SETTING_APP_VERSION = 'app_version'
+
+USER_EDITABLE_SETTINGS = (
+    SETTING_DBF_PATH,
+    SETTING_EXPORTS_PATH,
+    SETTING_CUENTA_VENTAS_DEF,
+    SETTING_EJERCICIO,
+    SETTING_COD_EMPRESA,
+    SETTING_IMPORTE_FORMATO,
+)
+
+_SETTING_DESCRIPTIONS = {
+    SETTING_DBF_PATH: 'Ruta al directorio que contiene los DBFs de GESDAI',
+    SETTING_EXPORTS_PATH: 'Directorio donde se guardan los SUENLACE.DAT generados',
+    SETTING_CUENTA_VENTAS_DEF: 'Subcuenta de ventas por defecto (700XXX/755XXX) cuando un artículo no resuelve',
+    SETTING_EJERCICIO: 'Año contable activo',
+    SETTING_COD_EMPRESA: 'Código de empresa en a3ASESOR (1–99999)',
+    SETTING_IMPORTE_FORMATO: "Formato de importes en SUENLACE: 'A' (escala implícita) o 'B' (decimal explícito)",
+}
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS config (
@@ -99,12 +132,77 @@ def init_db(app: Flask) -> None:
         conn.executescript(SCHEMA_SQL)
         _ensure_schema_version(conn)
         _run_migrations(conn)
+        seed_default_settings(conn, env=app.config.get('ENV', 'development'))
         conn.commit()
     finally:
         conn.close()
 
     app.teardown_appcontext(_close_db)
     log.info("SQLite inicializado en %s", db_path)
+
+
+# ─── API key/value sobre la tabla `config` ─────────────────────────────────
+
+
+def get_setting(conn: sqlite3.Connection, clave: str) -> str | None:
+    """Devuelve el valor de un ajuste o `None` si no está definido."""
+    row = conn.execute(
+        "SELECT valor FROM config WHERE clave = ?", (clave,)
+    ).fetchone()
+    if row is None:
+        return None
+    return row[0] if not isinstance(row, sqlite3.Row) else row['valor']
+
+
+def set_setting(
+    conn: sqlite3.Connection,
+    clave: str,
+    valor: str,
+    descripcion: str | None = None,
+) -> None:
+    """Inserta o actualiza un ajuste. No commitea — el caller decide."""
+    desc = descripcion or _SETTING_DESCRIPTIONS.get(clave)
+    conn.execute(
+        """
+        INSERT INTO config (clave, valor, descripcion)
+        VALUES (?, ?, ?)
+        ON CONFLICT(clave) DO UPDATE SET
+            valor = excluded.valor,
+            descripcion = COALESCE(config.descripcion, excluded.descripcion)
+        """,
+        (clave, valor, desc),
+    )
+
+
+def get_all_settings(conn: sqlite3.Connection) -> dict[str, str]:
+    """Devuelve todos los ajustes editables como dict clave→valor."""
+    placeholders = ','.join('?' * len(USER_EDITABLE_SETTINGS))
+    rows = conn.execute(
+        f"SELECT clave, valor FROM config WHERE clave IN ({placeholders})",
+        USER_EDITABLE_SETTINGS,
+    ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def seed_default_settings(conn: sqlite3.Connection, env: str) -> None:
+    """Inserta ajustes por defecto si aún no existen.
+
+    Las claves que ya tienen valor NUNCA se sobreescriben — esta función es
+    100% idempotente y respeta cualquier configuración del usuario.
+
+    En desarrollo, si el proyecto contiene una carpeta `DATA_DEV/` en la raíz,
+    se usa como `dbf_path` por defecto para que arrancar de cero "just works".
+    En producción no se siembra nada — el usuario configura desde la UI.
+    """
+    existing = {
+        row[0] for row in conn.execute("SELECT clave FROM config").fetchall()
+    }
+
+    if SETTING_DBF_PATH not in existing and env == 'development':
+        dev_dbf = project_root() / 'DATA_DEV'
+        if dev_dbf.is_dir():
+            set_setting(conn, SETTING_DBF_PATH, str(dev_dbf))
+            log.info("Seed dev: dbf_path → %s", dev_dbf)
 
 
 def get_db() -> sqlite3.Connection:

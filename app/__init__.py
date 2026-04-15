@@ -28,6 +28,8 @@ def create_app(config: type[Config] | None = None) -> Flask:
 
 
 def _register_blueprints(app: Flask) -> None:
+    from flask import redirect, url_for
+
     from app.routes.config_routes import bp as config_bp
     from app.routes.export import bp as export_bp
     from app.routes.history import bp as history_bp
@@ -39,6 +41,10 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(keywords_bp)
     app.register_blueprint(export_bp)
     app.register_blueprint(history_bp)
+
+    @app.get('/')
+    def root():
+        return redirect(url_for('export.index'))
 
 
 def _register_error_handlers(app: Flask) -> None:

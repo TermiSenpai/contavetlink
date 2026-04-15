@@ -1,0 +1,58 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip *)",
+      "Bash(py *)",
+      "Bash(.venv/Scripts/python.exe *)",
+      "Bash(.venv/Scripts/pip.exe *)",
+      "Bash(pytest *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(dir *)",
+      "Bash(type *)",
+      "Bash(echo *)",
+      "Bash(cat *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(cd *)",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force }')"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(del /s /q *)",
+      "Bash(rmdir /s /q *)",
+      "Bash(DROP *)",
+      "Bash(format *:*)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git checkout main*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-destructive.js"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo [CHECK] Verifica: tests pasando, linter limpio, revision visual si hay UI."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -10,17 +10,23 @@ Permite al usuario configurar:
 
 Incluye botón "Verificar conexión" que abre el directorio en READ_ONLY y
 comprueba que las tablas requeridas existen.
+
+GET / cableado en Fase 1: lee los ajustes vivos de la tabla `config` del
+SQLite. Los POST quedan como stub hasta Fase 4.
 """
 from __future__ import annotations
 
 from flask import Blueprint, render_template
+
+from app.db import get_all_settings, get_db
 
 bp = Blueprint('config', __name__, url_prefix='/config')
 
 
 @bp.get('/')
 def index():
-    return render_template('config.html')
+    valores = get_all_settings(get_db())
+    return render_template('config.html', valores=valores)
 
 
 @bp.post('/')

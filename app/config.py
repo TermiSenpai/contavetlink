@@ -194,10 +194,12 @@ def get_config(env: str | None = None) -> type[Config]:
     cls.LOGS_DIR = resolve_logs_dir(cls.APP_DATA_DIR)
     cls.EXPORTS_DIR = resolve_exports_dir(cls.APP_DATA_DIR)
 
-    if cls is TestingConfig:
-        cls.DB_PATH = Path(':memory:')
-    else:
-        cls.DB_PATH = resolve_db_path(cls.ENV, cls.APP_DATA_DIR)
+    # SQLite `:memory:` no funciona como DB de testing con Flask: cada
+    # `sqlite3.connect()` crea una base independiente, así que `init_db` y
+    # los handlers de request no comparten esquema. Usamos siempre un fichero
+    # bajo el `APP_DATA_DIR` resuelto — en tests, la fixture autouse de
+    # `conftest.py` ya redirige ese directorio a un tmp_path por test.
+    cls.DB_PATH = resolve_db_path(cls.ENV, cls.APP_DATA_DIR)
 
     if cls is ProductionConfig:
         _validate_production(cls)
