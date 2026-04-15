@@ -88,10 +88,7 @@ def resolve_exports_dir(app_data_dir: Path) -> Path:
     clave `exports_path`).
     """
     override = os.environ.get('GESDAI_EXPORTS_DIR')
-    if override:
-        path = Path(override)
-    else:
-        path = app_data_dir / 'exports'
+    path = Path(override) if override else app_data_dir / 'exports'
     path.mkdir(parents=True, exist_ok=True)
     return path
 

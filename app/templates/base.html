@@ -23,6 +23,11 @@
         {% if error %}
             <div class="alert alert-error">{{ error }}</div>
         {% endif %}
+        {% with mensajes = get_flashed_messages(with_categories=true) %}
+            {% for categoria, msg in mensajes %}
+                <div class="alert alert-{{ categoria }}">{{ msg }}</div>
+            {% endfor %}
+        {% endwith %}
         {% block content %}{% endblock %}
     </main>
 

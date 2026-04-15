@@ -5,11 +5,17 @@
 <h2>Mappings de clientes</h2>
 
 <div class="toolbar">
-    <select id="filtro-estado">
-        <option value="todos">Todos</option>
-        <option value="pendientes">Pendientes</option>
-        <option value="revisados">Revisados</option>
-    </select>
+    <form method="get" action="{{ url_for('mappings.clientes_index') }}" class="inline-form">
+        <select name="filtro" id="filtro-estado" onchange="this.form.submit()">
+            <option value="todos"      {% if filtro_actual == 'todos'      %}selected{% endif %}>Todos</option>
+            <option value="pendientes" {% if filtro_actual == 'pendientes' %}selected{% endif %}>Pendientes</option>
+            <option value="revisados"  {% if filtro_actual == 'revisados'  %}selected{% endif %}>Revisados</option>
+        </select>
+    </form>
+
+    <form method="post" action="{{ url_for('mappings.clientes_sync') }}" class="inline-form">
+        <button type="submit">Sincronizar desde GESDAI</button>
+    </form>
 
     <form method="post" action="{{ url_for('mappings.clientes_import') }}"
           enctype="multipart/form-data" class="inline-form">

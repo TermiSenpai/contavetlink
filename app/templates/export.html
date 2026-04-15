@@ -6,7 +6,9 @@
 
 <section class="filtros">
     <h3>Filtros</h3>
-    <div id="constructor-filtros" data-operador="AND">
+    <div id="constructor-filtros"
+         data-operador="AND"
+         data-inicial='{{ filtros_iniciales|tojson }}'>
         <!-- Construido dinámicamente por app.js -->
     </div>
     <div class="acciones-filtros">
@@ -17,13 +19,17 @@
     </div>
 </section>
 
-<section class="preview" hidden>
+<section class="preview" {% if not preview %}hidden{% endif %}>
     <h3>Vista previa</h3>
+    {% set resumen = preview.resumen if preview else {} %}
     <div class="resumen">
-        <span>Facturas: <strong id="r-facturas">0</strong></span>
-        <span>Registros DAT: <strong id="r-registros">0</strong></span>
-        <span>Importe total: <strong id="r-importe">0,00 €</strong></span>
-        <span>Pendientes: <strong id="r-pendientes">0</strong></span>
+        <span>Facturas: <strong id="r-facturas">{{ resumen.total|default(0) }}</strong></span>
+        <span>Exportables: <strong id="r-exportables">{{ resumen.exportables|default(0) }}</strong></span>
+        <span>🟢 <strong id="r-verdes">{{ resumen.verdes|default(0) }}</strong></span>
+        <span>🟡 <strong id="r-amarillos">{{ resumen.amarillos|default(0) }}</strong></span>
+        <span>🔴 <strong id="r-rojos">{{ resumen.rojos|default(0) }}</strong></span>
+        <span>⚪ <strong id="r-grises">{{ resumen.grises|default(0) }}</strong></span>
+        <span>Importe total: <strong id="r-importe">{{ resumen.importe_total|default('0') }} €</strong></span>
     </div>
 
     <table class="data-table" id="tabla-preview">
@@ -35,16 +41,36 @@
                 <th>Cliente</th>
                 <th>Subcuenta</th>
                 <th>Total c/IVA</th>
-                <th>Resolución</th>
+                <th>Notas</th>
             </tr>
         </thead>
         <tbody>
-            <!-- Filas insertadas por JS con clases verde/amarillo/rojo/gris -->
+            {% for f in preview.facturas|default([]) %}
+            <tr data-semaforo="{{ f.semaforo }}" class="semaforo-{{ f.semaforo }}">
+                <td>
+                    {% if f.semaforo == 'verde' %}🟢
+                    {% elif f.semaforo == 'amarillo' %}🟡
+                    {% elif f.semaforo == 'rojo' %}🔴
+                    {% else %}⚪{% endif %}
+                    {% if f.advertencia_contabil %}⚠️{% endif %}
+                </td>
+                <td>{{ f.serie }}{{ f.numero }}</td>
+                <td>{{ f.fecha }}</td>
+                <td>{{ f.cliente_codigo }}</td>
+                <td><code>{{ f.subcuenta or '—' }}</code></td>
+                <td class="right">{{ f.total }} €</td>
+                <td class="hint">{{ f.mensaje }}</td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 
     <div class="acciones-export">
-        <button type="button" data-action="generar-dat" disabled>Generar DAT</button>
+        <button type="button"
+                data-action="generar-dat"
+                {% if not preview or resumen.rojos > 0 or resumen.exportables == 0 %}disabled{% endif %}>
+            Generar DAT
+        </button>
         <button type="button" data-action="export-preview-excel">Descargar preview (Excel)</button>
     </div>
 </section>
