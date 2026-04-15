@@ -1,0 +1,72 @@
+# --- Datos sensibles de COLVET — NUNCA commitear ---
+*.dbf
+*.fpt
+*.cdx
+*.idx
+*.dbt
+DATA_DEV/
+tests/data/DATA_DEV/
+exports/
+*.DAT
+*.dat
+
+# --- SQLite del intermediario ---
+*.db
+*.sqlite
+*.sqlite3
+gesdai_exporter.db
+
+# --- Secretos y configuración local ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.key
+*.pem
+credentials*
+
+# --- Datos de usuario en desarrollo ---
+var/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# --- Entorno virtual ---
+venv/
+.venv/
+env/
+ENV/
+
+# --- Build de PyInstaller ---
+build/
+dist/
+*.manifest
+*.spec.bak
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Sistema ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# --- Logs locales ---
+*.log
+logs/

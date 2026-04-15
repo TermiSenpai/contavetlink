@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}gesdai-exporter{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+    <header class="topbar">
+        <h1 class="brand">gesdai-exporter</h1>
+        <nav class="mainnav">
+            <a href="{{ url_for('export.index') }}">Exportar</a>
+            <a href="{{ url_for('mappings.clientes_index') }}">Clientes</a>
+            <a href="{{ url_for('mappings.articulos_index') }}">Artículos</a>
+            <a href="{{ url_for('keywords.index') }}">Keywords</a>
+            <a href="{{ url_for('history.index') }}">Historial</a>
+            <a href="{{ url_for('config.index') }}">Configuración</a>
+        </nav>
+    </header>
+
+    <main class="content">
+        {% if error %}
+            <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <small>v{{ config.APP_VERSION }} · COLVET Guadalajara</small>
+    </footer>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Mappings de artículos · gesdai-exporter{% endblock %}
+
+{% block content %}
+<h2>Mappings de artículos</h2>
+
+<div class="toolbar">
+    <select id="filtro-estado">
+        <option value="todos">Todos</option>
+        <option value="pendientes">Pendientes</option>
+        <option value="revisados">Revisados</option>
+    </select>
+
+    <form method="post" action="{{ url_for('mappings.articulos_import') }}"
+          enctype="multipart/form-data" class="inline-form">
+        <input type="file" name="fichero" accept=".csv,.xlsx" required>
+        <button type="submit">Importar</button>
+    </form>
+
+    <a href="{{ url_for('mappings.articulos_export', formato='csv') }}">Exportar CSV</a>
+    <a href="{{ url_for('mappings.articulos_export', formato='xlsx') }}">Exportar Excel</a>
+</div>
+
+<table class="data-table" id="tabla-articulos">
+    <thead>
+        <tr>
+            <th>Clave GESDAI</th>
+            <th>Descripción</th>
+            <th>Origen</th>
+            <th>Cuenta a3 (700XXX/755XXX)</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for a in articulos|default([]) %}
+        <tr data-clave="{{ a.clave_gesdai }}">
+            <td>{{ a.clave_gesdai }}</td>
+            <td>{{ a.descripcion or '' }}</td>
+            <td>{% if a.es_texto_libre %}texto libre{% else %}catálogo{% endif %}</td>
+            <td>
+                <input type="text" pattern="^(700|705|755)\d{3}$" maxlength="6"
+                       value="{{ a.cuenta_a3 or '' }}" data-field="cuenta_a3">
+            </td>
+            <td>{% if a.revisado %}✓{% else %}—{% endif %}</td>
+            <td>
+                <button data-action="guardar">Guardar</button>
+                <button data-action="revisado">Marcar revisado</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

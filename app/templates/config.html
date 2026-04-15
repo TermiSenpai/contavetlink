@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Configuración · gesdai-exporter{% endblock %}
+
+{% block content %}
+<h2>Configuración</h2>
+
+<form method="post" action="{{ url_for('config.save') }}" class="form">
+    <label>
+        Ruta a los DBFs de GESDAI
+        <input type="text" name="dbf_path" value="{{ valores.dbf_path|default('') }}" required>
+        <button type="button" data-action="verificar-dbf">Verificar conexión</button>
+    </label>
+
+    <label>
+        Directorio de salida (DAT)
+        <input type="text" name="exports_path" value="{{ valores.exports_path|default('') }}" required>
+    </label>
+
+    <label>
+        Código de empresa en a3ASESOR
+        <input type="number" name="cod_empresa" min="1" max="99999"
+               value="{{ valores.cod_empresa|default('') }}" required>
+    </label>
+
+    <label>
+        Cuenta de ventas por defecto
+        <input type="text" name="cuenta_ventas_def" pattern="^(700|705|755)\d{3}$"
+               value="{{ valores.cuenta_ventas_def|default('700001') }}" required>
+    </label>
+
+    <label>
+        Ejercicio contable
+        <input type="number" name="ejercicio" min="2000" max="2099"
+               value="{{ valores.ejercicio|default('') }}" required>
+    </label>
+
+    <fieldset>
+        <legend>Formato de importes (SUENLACE)</legend>
+        <label><input type="radio" name="importe_formato" value="A"
+                      {% if valores.importe_formato == 'A' %}checked{% endif %}>
+               A — escala implícita (recomendado)</label>
+        <label><input type="radio" name="importe_formato" value="B"
+                      {% if valores.importe_formato == 'B' %}checked{% endif %}>
+               B — decimal explícito</label>
+    </fieldset>
+
+    <button type="submit">Guardar</button>
+</form>
+{% endblock %}

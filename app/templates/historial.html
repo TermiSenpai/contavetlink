@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Historial · gesdai-exporter{% endblock %}
+
+{% block content %}
+<h2>Historial de exportaciones</h2>
+
+<div class="toolbar">
+    <a href="{{ url_for('history.exportar_historial', formato='csv') }}">Exportar CSV</a>
+    <a href="{{ url_for('history.exportar_historial', formato='xlsx') }}">Exportar Excel</a>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Fecha export</th>
+            <th>Rango</th>
+            <th>Filtros</th>
+            <th>Nº facturas</th>
+            <th>Hash SHA-256</th>
+            <th>Validado</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for e in exportaciones|default([]) %}
+        <tr data-id="{{ e.id }}">
+            <td>{{ e.fecha_export }}</td>
+            <td>{{ e.fecha_desde }} → {{ e.fecha_hasta }}</td>
+            <td><code>{{ e.filtros_json or '—' }}</code></td>
+            <td>{{ e.num_facturas }}</td>
+            <td><code>{{ e.dat_hash[:12] }}…</code></td>
+            <td>{% if e.validado %}✓{% else %}—{% endif %}</td>
+            <td>
+                <a href="{{ url_for('history.descargar_dat', exportacion_id=e.id) }}">Descargar</a>
+                <button data-action="validar">Marcar validado</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

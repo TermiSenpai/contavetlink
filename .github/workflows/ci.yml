@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint + unit tests (windows)
+    runs-on: windows-latest
+    env:
+      FLASK_ENV: testing
+      SECRET_KEY: testing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      # Los tests de integración NO corren en CI (DATA_DEV/ no está en el repo
+      # por política de seguridad — datos reales de COLVET).
+      #
+      # TODO (Fase 2): subir --cov-fail-under a 85 cuando aterricen los primeros
+      # tests (ver CLAUDE.md y Sección 9 del plan). Mientras tanto toleramos
+      # exit=5 ("no tests collected") para que CI esté verde desde el día 1.
+      - name: Unit tests + coverage
+        shell: bash
+        run: |
+          set +e
+          pytest tests/unit/ --cov=app --cov-report=xml --cov-fail-under=0
+          status=$?
+          if [ $status -eq 5 ]; then
+            echo "::warning::No unit tests collected — esperado en fases tempranas."
+            exit 0
+          fi
+          exit $status
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7

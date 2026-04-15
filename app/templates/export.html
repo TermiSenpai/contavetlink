@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Exportar · gesdai-exporter{% endblock %}
+
+{% block content %}
+<h2>Exportar facturas → SUENLACE.DAT</h2>
+
+<section class="filtros">
+    <h3>Filtros</h3>
+    <div id="constructor-filtros" data-operador="AND">
+        <!-- Construido dinámicamente por app.js -->
+    </div>
+    <div class="acciones-filtros">
+        <button type="button" data-action="add-condicion">+ Condición</button>
+        <button type="button" data-action="add-grupo">+ Grupo</button>
+        <button type="button" data-action="limpiar-filtros">Limpiar</button>
+        <button type="button" data-action="preview">Previsualizar</button>
+    </div>
+</section>
+
+<section class="preview" hidden>
+    <h3>Vista previa</h3>
+    <div class="resumen">
+        <span>Facturas: <strong id="r-facturas">0</strong></span>
+        <span>Registros DAT: <strong id="r-registros">0</strong></span>
+        <span>Importe total: <strong id="r-importe">0,00 €</strong></span>
+        <span>Pendientes: <strong id="r-pendientes">0</strong></span>
+    </div>
+
+    <table class="data-table" id="tabla-preview">
+        <thead>
+            <tr>
+                <th>Estado</th>
+                <th>Factura</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Subcuenta</th>
+                <th>Total c/IVA</th>
+                <th>Resolución</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Filas insertadas por JS con clases verde/amarillo/rojo/gris -->
+        </tbody>
+    </table>
+
+    <div class="acciones-export">
+        <button type="button" data-action="generar-dat" disabled>Generar DAT</button>
+        <button type="button" data-action="export-preview-excel">Descargar preview (Excel)</button>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,4 @@
+Flask==3.0.3
+dbf==0.99.9
+openpyxl==3.1.5
+requests==2.32.3
