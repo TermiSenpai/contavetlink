@@ -164,6 +164,98 @@ def generar():
     )
 
 
+@bp.get('/factura/<codigo>')
+def factura_detalle(codigo: str):
+    """Devuelve el detalle completo de una factura para el modal."""
+    conn = get_db()
+    try:
+        config = leer_configuracion(conn)
+        source = get_configured_source(conn)
+    except (ConfiguracionIncompletaError, FuenteNoConfiguradaError) as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+    from app.mapping.resolver import (
+        ClienteSinSubcuentaError,
+        Resolver,
+    )
+    from app.mapping.store import get_cliente_mapping
+
+    # Buscar la factura en el rango completo (sin filtros restrictivos)
+    facturas = source.get_facturas(filtros_desde_json(None))
+    factura = None
+    for f in facturas:
+        if f.codigo == codigo:
+            factura = f
+            break
+    if factura is None:
+        return jsonify(ok=False, error=f'Factura {codigo!r} no encontrada'), 404
+
+    # Resolver cliente
+    resolver = Resolver(conn, config.cuenta_ventas_def)
+    cliente_info = {}
+    subcuenta = ''
+    try:
+        res_cli = resolver.resolver_cliente(factura.cliente_codigo)
+        subcuenta = res_cli.subcuenta_a3
+        cliente_info = {
+            'nombre': res_cli.nombre,
+            'subcuenta_a3': res_cli.subcuenta_a3,
+        }
+    except ClienteSinSubcuentaError:
+        fila = get_cliente_mapping(conn, factura.cliente_codigo)
+        cliente_info = {
+            'nombre': fila['nombre'] if fila else factura.cliente_codigo,
+            'subcuenta_a3': '',
+        }
+
+    # Resolver NIF del cliente
+    try:
+        cliente_obj = source.get_cliente(factura.cliente_codigo)
+        cliente_info['nif'] = cliente_obj.nif or ''
+    except (KeyError, Exception):
+        cliente_info['nif'] = ''
+
+    # Resolver cada línea
+    lineas_out = []
+    for linea in factura.lineas:
+        res_art = resolver.resolver_articulo(linea.articulo)
+        lineas_out.append({
+            'articulo': linea.articulo,
+            'comentario': linea.comentario,
+            'cantidad': str(linea.cantidad),
+            'precio': str(linea.precio),
+            'iva': str(linea.iva),
+            'total_linea': str(linea.total_linea),
+            'cuenta_a3': res_art.cuenta_a3,
+            'resolucion_tipo': res_art.tipo.value,
+        })
+
+    conn.commit()
+
+    return jsonify(
+        ok=True,
+        factura={
+            'codigo': factura.codigo,
+            'serie': factura.serie.strip(),
+            'numero': factura.numero.strip(),
+            'fecha': factura.fecha.isoformat(),
+            'cliente_codigo': factura.cliente_codigo,
+            'total_base': str(factura.total_base),
+            'total_con_iva': str(factura.total_con_iva),
+            'contabil': factura.contabil,
+            'ptsbase1': str(factura.ptsbase1),
+            'iva1': str(factura.iva1),
+            'ptsbase2': str(factura.ptsbase2),
+            'iva2': str(factura.iva2),
+            'ptsbase3': str(factura.ptsbase3),
+            'iva3': str(factura.iva3),
+        },
+        cliente=cliente_info,
+        subcuenta=subcuenta,
+        lineas=lineas_out,
+    )
+
+
 @bp.post('/preview/excel')
 def preview_excel():
     """Devuelve la preview actual como fichero Excel descargable."""

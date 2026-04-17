@@ -340,15 +340,18 @@
         const tbody = $('#tabla-preview tbody');
         if (!tbody) return;
         tbody.innerHTML = '';
-        (body.facturas || []).forEach((f) => {
+        const facturas = body.facturas || [];
+        facturas.forEach((f) => {
             const tr = document.createElement('tr');
             tr.dataset.semaforo = f.semaforo;
-            tr.className = 'semaforo-' + f.semaforo;
+            tr.dataset.codigo = f.codigo;
+            tr.className = 'semaforo-' + f.semaforo + ' preview-row';
+            tr.style.cursor = 'pointer';
             const icono = { verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' }[f.semaforo] || '';
             const warn = f.advertencia_contabil ? ' ⚠️' : '';
             tr.innerHTML = `
                 <td>${icono}${warn}</td>
-                <td>${f.serie}${f.numero}</td>
+                <td class="mono">${f.serie}${f.numero}</td>
                 <td>${f.fecha}</td>
                 <td>${f.cliente_codigo}</td>
                 <td><code>${f.subcuenta || '—'}</code></td>
@@ -357,6 +360,9 @@
             `;
             tbody.appendChild(tr);
         });
+
+        const empty = document.getElementById('preview-empty');
+        if (empty) empty.hidden = facturas.length > 0;
 
         const seccion = $('section.preview');
         if (seccion) seccion.hidden = false;
@@ -369,66 +375,328 @@
         }
     }
 
-    // ─── Edición inline de mappings ─────────────────────────────────────────
+    // ─── Modal detalle de factura ─────────────────────────────────────────────
 
-    function inicializarEdicionInline() {
-        document.addEventListener('click', async (e) => {
-            const btnGuardar = e.target.closest('[data-action="guardar"]');
-            if (btnGuardar) {
-                await guardarMappingInline(btnGuardar);
-                return;
+    function inicializarModalFactura() {
+        const modal = document.getElementById('modal-factura');
+        if (!modal) return;
+
+        // Delegated click on preview rows
+        document.addEventListener('click', (e) => {
+            const row = e.target.closest('.preview-row');
+            if (row && row.dataset.codigo) {
+                abrirModalFactura(row.dataset.codigo, row.dataset.semaforo);
             }
-            const btnRevisar = e.target.closest('[data-action="revisado"]');
-            if (btnRevisar) {
-                await marcarRevisadoInline(btnRevisar);
-                return;
+        });
+
+        // Close modal
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal || e.target.closest('[data-action="close-modal"]')) {
+                modal.hidden = true;
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.hidden) {
+                modal.hidden = true;
             }
         });
     }
 
-    async function guardarMappingInline(btn) {
-        const tr = btn.closest('tr');
+    async function abrirModalFactura(codigo, semaforo) {
+        const modal = document.getElementById('modal-factura');
+        if (!modal) return;
+
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        const setHTML = (id, v) => { const el = document.getElementById(id); if (el) el.innerHTML = v; };
+
+        // Show modal with loading state
+        set('md-title', 'Cargando...');
+        set('md-subtitle', '');
+        setHTML('md-lineas-body', '');
+        modal.hidden = false;
+
+        try {
+            const res = await fetch('/export/factura/' + encodeURIComponent(codigo));
+            const body = await res.json();
+            if (!res.ok || body.ok === false) {
+                set('md-title', 'Error');
+                set('md-subtitle', body.error || 'No se pudo cargar la factura');
+                return;
+            }
+
+            const f = body.factura;
+            const cli = body.cliente;
+
+            // Header
+            set('md-title', 'Factura ' + f.serie + f.numero);
+            set('md-subtitle', f.fecha + ' · Serie ' + f.serie + ' · ' + cli.nombre);
+
+            // Meta
+            set('md-cliente', cli.nombre);
+            set('md-nif', cli.nif || '—');
+            set('md-subcuenta', body.subcuenta || '—');
+            set('md-base', formatEur(f.total_base) + ' €');
+            set('md-total', formatEur(f.total_con_iva) + ' €');
+
+            // Semaphore badge
+            const sem = semaforo || 'gris';
+            const semLabel = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', gris: 'Gris' }[sem] || sem;
+            setHTML('md-semaforo',
+                '<span class="chip chip-' + sem + '" style="font-size:12px; padding:4px 10px;">' +
+                '<span class="chip-dot"></span>' + semLabel + '</span>'
+            );
+
+            // Lines table
+            const lineas = body.lineas || [];
+            set('md-lineas-count', lineas.length + ' articulos');
+            let hasKeywordOrDefault = false;
+            let lineasHTML = '';
+            lineas.forEach((l) => {
+                const isAlt = l.resolucion_tipo === 'keyword' || l.resolucion_tipo === 'default';
+                if (isAlt) hasKeywordOrDefault = true;
+                const rowClass = isAlt ? 'row-keyword' : '';
+                const articulo = l.articulo || '';
+                const descripcion = l.comentario || l.articulo || '';
+                const resolMark = isAlt
+                    ? '<br><span style="font-size:11px; color:#92400E;">texto libre · resolución por ' + l.resolucion_tipo + '</span>'
+                    : '';
+                const articuloCell = articulo
+                    ? escapeHtml(articulo.substring(0, 8))
+                    : '<span class="hint">—</span>';
+                const cuentaColor = isAlt ? '#92400E' : 'var(--primary)';
+                lineasHTML += '<tr class="' + rowClass + '">' +
+                    '<td class="mono" style="font-size:12px;">' + articuloCell + '</td>' +
+                    '<td style="font-size:13px;">' + escapeHtml(descripcion) + resolMark + '</td>' +
+                    '<td class="right mono" style="font-size:12px;">' + l.cantidad + '</td>' +
+                    '<td class="right mono" style="font-size:12px;">' + formatEur(l.precio) + ' €</td>' +
+                    '<td class="right mono" style="font-size:12px; font-weight:500;">' + formatEur(l.total_linea) + ' €</td>' +
+                    '<td class="center mono" style="font-size:11px; font-weight:500; color:' + cuentaColor + ';">' + l.cuenta_a3 + '</td>' +
+                    '</tr>';
+            });
+            setHTML('md-lineas-body', lineasHTML);
+
+            // IVA breakdown
+            let ivaHTML = '';
+            const bases = [
+                { base: f.ptsbase1, iva: f.iva1, label: '21%' },
+                { base: f.ptsbase2, iva: f.iva2, label: '10%' },
+                { base: f.ptsbase3, iva: f.iva3, label: '4%' },
+            ];
+            bases.forEach((b) => {
+                const baseVal = parseFloat(b.base || '0');
+                if (baseVal > 0) {
+                    ivaHTML += '<div class="modal-iva-row"><span>Base ' + b.label + '</span><span>' + formatEur(b.base) + ' €</span></div>';
+                    ivaHTML += '<div class="modal-iva-row"><span>Cuota ' + b.label + '</span><span>' + formatEur(b.iva) + ' €</span></div>';
+                }
+            });
+            setHTML('md-iva-rows', ivaHTML);
+
+            // Totals
+            const totalBase = parseFloat(f.total_base || '0');
+            const totalIva = parseFloat(f.total_con_iva || '0') - totalBase;
+            set('md-tot-base', formatEur(f.total_base) + ' €');
+            set('md-tot-iva', formatEur(String(totalIva)) + ' €');
+            set('md-tot-total', formatEur(f.total_con_iva) + ' €');
+
+            // Show tip if there are keyword/default lines
+            const tip = document.getElementById('md-tip');
+            if (tip) tip.hidden = !hasKeywordOrDefault;
+
+        } catch (err) {
+            set('md-title', 'Error');
+            set('md-subtitle', err.message);
+        }
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // ─── Edición inline de mappings (autosave) ──────────────────────────────
+    //
+    // Filosofía: el único usuario escribe la subcuenta directamente en el
+    // input. Al cumplir la regex (430XXX / 700-705-755 XXX) se POSTea al backend
+    // con un pequeño debounce (evita guardar en cada pulsación mientras se
+    // teclea). Guardar = marcar revisado. Un duplicado devuelve 409 y se
+    // resalta en rojo con el mensaje del backend.
+
+    const AUTOSAVE_DEBOUNCE_MS = 400;
+
+    function inicializarEdicionInline() {
+        const inputs = $$('input[data-autosave]');
+        if (inputs.length === 0) return;
+
+        inputs.forEach((input) => {
+            let timer = null;
+            const scheduleSave = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => tryAutosave(input), AUTOSAVE_DEBOUNCE_MS);
+            };
+
+            input.addEventListener('input', () => {
+                input.classList.remove('is-saved', 'is-error');
+                const raw = input.value.trim();
+                const normalizado = normalizar(raw, input);
+                if (raw === '' || regexFor(input).test(normalizado)) {
+                    scheduleSave();
+                }
+            });
+
+            input.addEventListener('blur', () => {
+                if (timer) { clearTimeout(timer); timer = null; }
+                tryAutosave(input);
+            });
+
+            input.addEventListener('keydown', (e) => {
+                // Enter = guardar ya y saltar al siguiente. Tab salta solo por
+                // orden natural del DOM (no hay botones intermedios).
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (timer) { clearTimeout(timer); timer = null; }
+                    tryAutosave(input).then(() => focusSiguiente(input));
+                }
+            });
+        });
+    }
+
+    function regexFor(input) {
+        return input.dataset.autosave === 'cliente'
+            ? RE_SUBCUENTA_CLIENTE
+            : RE_SUBCUENTA_INGRESO;
+    }
+
+    // 1-3 dígitos = sufijo de la cuenta por defecto, padeado a 3 con ceros a
+    // la izquierda (430 clientes, 700 artículos). Escribir los 6 dígitos
+    // completos permite usar 705/755 puntualmente.
+    //   "1"     → "430001" / "700001"
+    //   "12"    → "430012" / "700012"
+    //   "123"   → "430123" / "700123"
+    //   "705042"→ tal cual
+    function normalizar(raw, input) {
+        if (/^\d{1,3}$/.test(raw)) {
+            const sufijo = raw.padStart(3, '0');
+            return (input.dataset.autosave === 'cliente' ? '430' : '700') + sufijo;
+        }
+        return raw;
+    }
+
+    async function tryAutosave(input) {
+        const tr = input.closest('tr');
         if (!tr) return;
-        const input = $('input[data-field]', tr);
-        if (!input) return;
-        const valor = input.value.trim();
-        const esCliente = !!tr.dataset.codigo;
-        const regex = esCliente ? RE_SUBCUENTA_CLIENTE : RE_SUBCUENTA_INGRESO;
-        if (!regex.test(valor)) {
-            alert(esCliente
-                ? 'Subcuenta de cliente inválida (430XXX).'
-                : 'Cuenta de ingreso inválida (700/705/755 XXX).');
+        const raw = input.value.trim();
+        const esCliente = input.dataset.autosave === 'cliente';
+
+        // Vacío: nada que guardar (y no mostramos error).
+        if (raw === '') {
+            pintarEstado(tr, 'empty', '—');
             return;
         }
+
+        // Expande 3 dígitos al prefijo por defecto. Actualiza el input para
+        // que el usuario vea el valor real guardado.
+        const valor = normalizar(raw, input);
+        if (valor !== raw) {
+            input.value = valor;
+        }
+
+        if (!regexFor(input).test(valor)) {
+            pintarEstado(tr, 'error', esCliente ? 'Formato 430XXX' : 'Formato 700/705/755XXX');
+            input.classList.add('is-error');
+            return;
+        }
+
+        // Si no ha cambiado respecto al último valor guardado, no repitas POST.
+        if (input.dataset.last === valor) {
+            pintarEstado(tr, 'ok', '✓');
+            input.classList.add('is-saved');
+            return;
+        }
+
         const id = tr.dataset.codigo || tr.dataset.clave;
         const url = esCliente
             ? `/mappings/clientes/${encodeURIComponent(id)}`
             : `/mappings/articulos/${encodeURIComponent(id)}`;
         const payload = esCliente ? { subcuenta_a3: valor } : { cuenta_a3: valor };
+
+        pintarEstado(tr, 'saving', '…');
+        input.classList.remove('is-error', 'is-saved');
+
         try {
-            await postJSON(url, payload);
-            input.classList.add('saved');
-            setTimeout(() => input.classList.remove('saved'), 1500);
+            const body = await postJSON(url, payload);
+            input.dataset.last = valor;
+            input.classList.add('is-saved');
+            input.classList.remove('is-error');
+            tr.dataset.revisado = '1';
+            pintarEstado(tr, 'ok', '✓');
+            if (body.progreso) actualizarProgreso(body.progreso);
         } catch (err) {
-            alert('Error: ' + err.message);
+            input.classList.add('is-error');
+            input.classList.remove('is-saved');
+            pintarEstado(tr, 'error', err.message || 'Error');
         }
     }
 
-    async function marcarRevisadoInline(btn) {
-        const tr = btn.closest('tr');
-        if (!tr) return;
-        const id = tr.dataset.codigo || tr.dataset.clave;
-        const esCliente = !!tr.dataset.codigo;
-        const url = esCliente
-            ? `/mappings/clientes/${encodeURIComponent(id)}/revisar`
-            : `/mappings/articulos/${encodeURIComponent(id)}/revisar`;
-        try {
-            await postJSON(url, { revisado: true });
-            const estado = tr.querySelector('td:nth-last-child(2)');
-            if (estado) estado.textContent = '✓';
-        } catch (err) {
-            alert('Error: ' + err.message);
+    function pintarEstado(tr, estado, texto) {
+        const span = tr.querySelector('.mapping-status');
+        if (!span) return;
+        span.className = 'mapping-status status-' + estado;
+        span.textContent = texto;
+        span.title = texto;
+    }
+
+    function actualizarProgreso(progreso) {
+        const r = document.getElementById('progreso-revisados');
+        const t = document.getElementById('progreso-total');
+        if (r && typeof progreso.revisados === 'number') r.textContent = progreso.revisados;
+        if (t && typeof progreso.total === 'number') t.textContent = progreso.total;
+    }
+
+    function focusSiguiente(input) {
+        const inputs = $$('input[data-autosave]');
+        const idx = inputs.indexOf(input);
+        if (idx >= 0 && idx < inputs.length - 1) {
+            const next = inputs[idx + 1];
+            next.focus();
+            next.select();
         }
+    }
+
+    // ─── Buscador in-page de tablas de mappings ─────────────────────────────
+
+    function inicializarBuscador() {
+        const buscador = document.getElementById('buscador-tabla');
+        if (!buscador) return;
+        const selector = buscador.dataset.target || '#tabla-articulos';
+        const tabla = document.querySelector(selector);
+        if (!tabla) return;
+        const filas = Array.from(tabla.querySelectorAll('tbody tr'));
+
+        // Shortcut: "/" enfoca el buscador desde cualquier parte de la página.
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && document.activeElement.tagName !== 'INPUT'
+                && document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                buscador.focus();
+                buscador.select();
+            }
+        });
+
+        const aplicar = () => {
+            const q = buscador.value.trim().toLowerCase();
+            if (q === '') {
+                filas.forEach((tr) => { tr.hidden = false; });
+                return;
+            }
+            const tokens = q.split(/\s+/);
+            filas.forEach((tr) => {
+                const hay = tr.dataset.search || '';
+                tr.hidden = !tokens.every((t) => hay.includes(t));
+            });
+        };
+        buscador.addEventListener('input', aplicar);
+        buscador.addEventListener('search', aplicar);
     }
 
     // ─── /config: verificar conexión DBF ────────────────────────────────────
@@ -440,17 +708,66 @@
             const input = $('input[name="dbf_path"]');
             if (!input) return;
             btn.disabled = true;
+            const resultEl = document.getElementById('verify-result');
+            const textEl = document.getElementById('verify-text');
             try {
                 const body = await postJSON('/config/verificar-dbf', { dbf_path: input.value });
-                if (body.ok) {
+                if (resultEl && textEl) {
+                    if (body.ok) {
+                        resultEl.className = 'verify-result is-ok';
+                        textEl.textContent = `Conexión OK — ${body.n_clientes} clientes, ${body.n_articulos} artículos encontrados`;
+                    } else {
+                        resultEl.className = 'verify-result is-error';
+                        textEl.textContent = 'Error: ' + (body.error || 'desconocido');
+                    }
+                    resultEl.style.display = 'flex';
+                } else if (body.ok) {
                     alert(`Conexión OK: ${body.n_clientes} clientes, ${body.n_articulos} artículos.`);
                 } else {
                     alert('Error: ' + (body.error || 'desconocido'));
                 }
             } catch (e) {
-                alert('Error: ' + e.message);
+                if (resultEl && textEl) {
+                    resultEl.className = 'verify-result is-error';
+                    textEl.textContent = 'Error: ' + e.message;
+                    resultEl.style.display = 'flex';
+                } else {
+                    alert('Error: ' + e.message);
+                }
             } finally {
                 btn.disabled = false;
+            }
+        });
+    }
+
+    // ─── Keywords: probador ────────────────────────────────────────────────
+
+    function inicializarProbador() {
+        const form = document.getElementById('form-probar');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const texto = form.querySelector('input[name="texto"]').value.trim();
+            if (!texto) return;
+            const resultDiv = document.getElementById('resultado-probar');
+            if (!resultDiv) return;
+            try {
+                const body = await postJSON(form.action, { texto });
+                if (body.match) {
+                    resultDiv.className = 'tester-result is-match';
+                    resultDiv.innerHTML = `
+                        <strong>Match encontrado</strong><br>
+                        <span>Keyword: <strong>${body.keyword}</strong></span><br>
+                        <span>Cuenta: <strong>${body.cuenta_a3}</strong></span><br>
+                        <span>Prioridad: <strong>${body.prioridad}</strong></span>
+                    `;
+                } else {
+                    resultDiv.className = 'tester-result is-no-match';
+                    resultDiv.textContent = 'Sin coincidencia — se usará la cuenta por defecto.';
+                }
+            } catch (err) {
+                resultDiv.className = 'tester-result is-no-match';
+                resultDiv.textContent = 'Error: ' + err.message;
             }
         });
     }
@@ -460,7 +777,10 @@
     document.addEventListener('DOMContentLoaded', () => {
         inicializarConstructorFiltros();
         inicializarPreview();
+        inicializarModalFactura();
         inicializarEdicionInline();
+        inicializarBuscador();
         inicializarVerificarDbf();
+        inicializarProbador();
     });
 })();

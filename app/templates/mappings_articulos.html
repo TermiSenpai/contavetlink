@@ -1,64 +1,120 @@
 {% extends "base.html" %}
-{% block title %}Mappings de artículos · gesdai-exporter{% endblock %}
+{% block title %}Mappings de articulos · gesdai-exporter{% endblock %}
 
 {% block content %}
-<h2>Mappings de artículos</h2>
+<div class="page-header">
+    <div class="page-header-left">
+        <h1 class="page-title">Mappings de articulos</h1>
+        <p class="page-subtitle">Asigna cuentas contables 700/705/755 XXX a cada articulo de GESDAI</p>
+    </div>
+</div>
 
 <div class="toolbar">
+    <div class="progress-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+        <span>Revisados: <strong id="progreso-revisados">{{ progreso.revisados|default(0) }}</strong>
+        / <strong id="progreso-total">{{ progreso.total|default(0) }}</strong></span>
+    </div>
+
+    <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+        </svg>
+        <input type="search"
+               id="buscador-tabla"
+               data-target="#tabla-articulos"
+               placeholder="Buscar... ( / )"
+               autocomplete="off">
+    </div>
+
     <form method="get" action="{{ url_for('mappings.articulos_index') }}" class="inline-form">
-        <select name="filtro" id="filtro-estado" onchange="this.form.submit()">
-            <option value="todos"      {% if filtro_actual == 'todos'      %}selected{% endif %}>Todos</option>
-            <option value="pendientes" {% if filtro_actual == 'pendientes' %}selected{% endif %}>Pendientes</option>
-            <option value="revisados"  {% if filtro_actual == 'revisados'  %}selected{% endif %}>Revisados</option>
-        </select>
+        <div class="select-wrap">
+            <select name="filtro" id="filtro-estado" onchange="this.form.submit()">
+                <option value="todos"      {% if filtro_actual == 'todos'      %}selected{% endif %}>Todos</option>
+                <option value="pendientes" {% if filtro_actual == 'pendientes' %}selected{% endif %}>Pendientes</option>
+                <option value="revisados"  {% if filtro_actual == 'revisados'  %}selected{% endif %}>Revisados</option>
+            </select>
+            <svg class="select-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
     </form>
 
     <form method="post" action="{{ url_for('mappings.articulos_sync') }}" class="inline-form">
-        <button type="submit">Sincronizar desde GESDAI</button>
+        <button type="submit" class="btn-ghost" title="Refrescar desde los DBFs de GESDAI">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>
+            Sync
+        </button>
     </form>
 
     <form method="post" action="{{ url_for('mappings.articulos_import') }}"
           enctype="multipart/form-data" class="inline-form">
-        <input type="file" name="fichero" accept=".csv,.xlsx" required>
-        <button type="submit">Importar</button>
+        <label class="btn-ghost file-upload" title="Importar CSV o Excel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+            Importar
+            <input type="file" name="fichero" accept=".csv,.xlsx" required
+                   onchange="if(this.files.length)this.form.submit()">
+        </label>
     </form>
 
-    <a href="{{ url_for('mappings.articulos_export', formato='csv') }}">Exportar CSV</a>
-    <a href="{{ url_for('mappings.articulos_export', formato='xlsx') }}">Exportar Excel</a>
+    <div class="btn-group" role="group" aria-label="Exportar">
+        <a href="{{ url_for('mappings.articulos_export', formato='csv') }}">CSV</a>
+        <a href="{{ url_for('mappings.articulos_export', formato='xlsx') }}">Excel</a>
+    </div>
 </div>
 
-<div class="progreso">
-    <span>Revisados: {{ progreso.revisados|default(0) }} / {{ progreso.total|default(0) }}</span>
+<div class="table-card" style="flex:1;">
+    <table class="data-table editable-table" id="tabla-articulos">
+        <thead>
+            <tr>
+                <th style="width:100px;">Clave</th>
+                <th>Descripcion</th>
+                <th style="width:100px;">Origen</th>
+                <th style="width:160px;">Cuenta a3</th>
+                <th class="center" style="width:110px;">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in articulos|default([]) %}
+            <tr data-clave="{{ a.clave_gesdai }}"
+                data-search="{{ (a.clave_gesdai ~ ' ' ~ (a.descripcion or ''))|lower }}"
+                {% if a.revisado %}data-revisado="1"{% endif %}>
+                <td class="mono">{{ a.clave_gesdai }}</td>
+                <td>{{ a.descripcion or '' }}</td>
+                <td>
+                    {% if a.es_texto_libre %}
+                        <span class="badge badge-pendiente" style="font-size:11px; padding:3px 8px;">texto libre</span>
+                    {% else %}
+                        <span class="hint">catalogo</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <input type="text"
+                           pattern="^(700|705|755)\d{3}$"
+                           maxlength="6"
+                           inputmode="numeric"
+                           value="{{ a.cuenta_a3 or '' }}"
+                           data-field="cuenta_a3"
+                           data-autosave="articulo"
+                           placeholder="700001">
+                </td>
+                <td class="col-estado">
+                    <span class="mapping-status" aria-live="polite">
+                        {% if a.revisado %}
+                            <span class="badge badge-revisado">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                                Revisado
+                            </span>
+                        {% else %}
+                            <span class="badge badge-pendiente">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                Pendiente
+                            </span>
+                        {% endif %}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
-
-<table class="data-table" id="tabla-articulos">
-    <thead>
-        <tr>
-            <th>Clave GESDAI</th>
-            <th>Descripción</th>
-            <th>Origen</th>
-            <th>Cuenta a3 (700XXX/755XXX)</th>
-            <th>Estado</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for a in articulos|default([]) %}
-        <tr data-clave="{{ a.clave_gesdai }}">
-            <td>{{ a.clave_gesdai }}</td>
-            <td>{{ a.descripcion or '' }}</td>
-            <td>{% if a.es_texto_libre %}texto libre{% else %}catálogo{% endif %}</td>
-            <td>
-                <input type="text" pattern="^(700|705|755)\d{3}$" maxlength="6"
-                       value="{{ a.cuenta_a3 or '' }}" data-field="cuenta_a3">
-            </td>
-            <td>{% if a.revisado %}✓{% else %}—{% endif %}</td>
-            <td>
-                <button data-action="guardar">Guardar</button>
-                <button data-action="revisado">Marcar revisado</button>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
 {% endblock %}

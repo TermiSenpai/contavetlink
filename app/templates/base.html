@@ -6,34 +6,105 @@
     <title>{% block title %}gesdai-exporter{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
+{% set ep = request.endpoint or '' %}
 <body>
-    <header class="topbar">
-        <h1 class="brand">gesdai-exporter</h1>
-        <nav class="mainnav">
-            <a href="{{ url_for('export.index') }}">Exportar</a>
-            <a href="{{ url_for('mappings.clientes_index') }}">Clientes</a>
-            <a href="{{ url_for('mappings.articulos_index') }}">Artículos</a>
-            <a href="{{ url_for('keywords.index') }}">Keywords</a>
-            <a href="{{ url_for('history.index') }}">Historial</a>
-            <a href="{{ url_for('config.index') }}">Configuración</a>
-        </nav>
-    </header>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="brand-block">
+                <div class="brand-logo" aria-hidden="true">GE</div>
+                <span class="brand-name">GesdaiExporter</span>
+            </div>
 
-    <main class="content">
-        {% if error %}
-            <div class="alert alert-error">{{ error }}</div>
-        {% endif %}
-        {% with mensajes = get_flashed_messages(with_categories=true) %}
-            {% for categoria, msg in mensajes %}
-                <div class="alert alert-{{ categoria }}">{{ msg }}</div>
-            {% endfor %}
-        {% endwith %}
-        {% block content %}{% endblock %}
-    </main>
+            <hr class="sidebar-divider">
 
-    <footer class="footer">
-        <small>v{{ config.APP_VERSION }} · COLVET Guadalajara</small>
-    </footer>
+            <nav class="sidenav" aria-label="Navegacion principal">
+                <div class="nav-section">
+                    <div class="nav-group-label">Operacion</div>
+
+                    <a href="{{ url_for('export.index') }}"
+                       class="nav-item {% if ep.startswith('export') %}is-active{% endif %}">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v12a2 2 0 0 1-2 2z"/><path d="M9 17h6"/><path d="M12 12v5"/>
+                        </svg>
+                        <span>Exportar</span>
+                    </a>
+
+                    <a href="{{ url_for('history.index') }}"
+                       class="nav-item {% if ep.startswith('history') %}is-active{% endif %}">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>
+                        </svg>
+                        <span>Historial</span>
+                    </a>
+                </div>
+
+                <hr class="sidebar-divider">
+
+                <div class="nav-section">
+                    <div class="nav-group-label">Maestros</div>
+
+                    <a href="{{ url_for('mappings.clientes_index') }}"
+                       class="nav-item {% if ep == 'mappings.clientes_index' or ep.startswith('mappings.clientes') %}is-active{% endif %}">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                        <span>Clientes</span>
+                    </a>
+
+                    <a href="{{ url_for('mappings.articulos_index') }}"
+                       class="nav-item {% if ep.startswith('mappings.articulos') %}is-active{% endif %}">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/>
+                        </svg>
+                        <span>Articulos</span>
+                    </a>
+
+                    <a href="{{ url_for('keywords.index') }}"
+                       class="nav-item {% if ep.startswith('keywords') %}is-active{% endif %}">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m15.5 3-1.2 1.7a.8.8 0 0 0 .4 1.2l1.9.5a.8.8 0 0 1 .6.9l-.3 1.9a.8.8 0 0 0 .7 1h2a.8.8 0 0 1 .7 1l-.3 1.9a.8.8 0 0 0 .6.9l1.9.5a.8.8 0 0 1 .4 1.2L21.5 16"/><path d="M13.5 2 12 4"/><path d="m7 21 3.5-5-3.5-5"/><path d="M16 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/>
+                        </svg>
+                        <span>Keywords</span>
+                    </a>
+                </div>
+
+                <hr class="sidebar-divider">
+
+                <div class="nav-section">
+                    <div class="nav-group-label">Sistema</div>
+
+                    <a href="{{ url_for('config.index') }}"
+                       class="nav-item {% if ep.startswith('config') %}is-active{% endif %}">
+                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <span>Configuracion</span>
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-spacer"></div>
+
+            <div class="sidebar-footer">
+                <span class="status-dot"></span>
+                <small>v{{ config.APP_VERSION }}</small>
+            </div>
+        </aside>
+
+        <div class="main-area">
+            <main class="content">
+                {% if error %}
+                    <div class="alert alert-error">{{ error }}</div>
+                {% endif %}
+                {% with mensajes = get_flashed_messages(with_categories=true) %}
+                    {% for categoria, msg in mensajes %}
+                        <div class="alert alert-{{ categoria }}">{{ msg }}</div>
+                    {% endfor %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     {% block scripts %}{% endblock %}

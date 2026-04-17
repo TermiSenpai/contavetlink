@@ -34,6 +34,7 @@ from flask import (
 from app.db import get_db
 from app.io import csv_handler, excel_handler
 from app.mapping.store import (
+    CuentaDuplicadaError,
     SubcuentaInvalidaError,
     list_articulos_mappings,
     list_clientes_mappings,
@@ -100,18 +101,32 @@ def clientes_sync():
 
 @bp.post('/clientes/<codigo>')
 def clientes_update(codigo: str):
-    """Actualiza la subcuenta de un cliente. Valida 430XXX con regex."""
+    """Actualiza la subcuenta de un cliente y lo marca revisado.
+
+    Único usuario (Anguix) ⇒ escribir = revisar. Devuelve 409 si la subcuenta
+    ya está asignada a otro cliente.
+    """
     data = request.get_json(silent=True) or request.form
     subcuenta = (data.get('subcuenta_a3') or '').strip()
     conn = get_db()
     try:
         set_subcuenta_cliente(conn, codigo, subcuenta)
+        marcar_cliente_revisado(conn, codigo, revisado=True)
     except SubcuentaInvalidaError as e:
         return jsonify(ok=False, error=str(e)), 400
+    except CuentaDuplicadaError as e:
+        return jsonify(ok=False, error=str(e)), 409
     except KeyError:
         return jsonify(ok=False, error=f"Cliente no encontrado: {codigo}"), 404
     conn.commit()
-    return jsonify(ok=True, codigo=codigo, subcuenta_a3=subcuenta)
+    revisados, total = progreso_clientes(conn)
+    return jsonify(
+        ok=True,
+        codigo=codigo,
+        subcuenta_a3=subcuenta,
+        revisado=True,
+        progreso={'revisados': revisados, 'total': total},
+    )
 
 
 @bp.post('/clientes/<codigo>/revisar')
@@ -198,18 +213,32 @@ def articulos_sync():
 
 @bp.post('/articulos/<clave>')
 def articulos_update(clave: str):
-    """Actualiza la cuenta de un artículo. Valida 700/705/755 XXX."""
+    """Actualiza la cuenta de un artículo y lo marca revisado.
+
+    Único usuario ⇒ escribir = revisar. Devuelve 409 si la cuenta ya está
+    asignada a otro artículo.
+    """
     data = request.get_json(silent=True) or request.form
     cuenta = (data.get('cuenta_a3') or '').strip()
     conn = get_db()
     try:
         set_cuenta_articulo(conn, clave, cuenta)
+        marcar_articulo_revisado(conn, clave, revisado=True)
     except SubcuentaInvalidaError as e:
         return jsonify(ok=False, error=str(e)), 400
+    except CuentaDuplicadaError as e:
+        return jsonify(ok=False, error=str(e)), 409
     except KeyError:
         return jsonify(ok=False, error=f"Artículo no encontrado: {clave}"), 404
     conn.commit()
-    return jsonify(ok=True, clave=clave, cuenta_a3=cuenta)
+    revisados, total = progreso_articulos(conn)
+    return jsonify(
+        ok=True,
+        clave=clave,
+        cuenta_a3=cuenta,
+        revisado=True,
+        progreso={'revisados': revisados, 'total': total},
+    )
 
 
 @bp.post('/articulos/<clave>/revisar')

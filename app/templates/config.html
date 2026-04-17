@@ -1,49 +1,83 @@
 {% extends "base.html" %}
-{% block title %}Configuración · gesdai-exporter{% endblock %}
+{% block title %}Configuracion · gesdai-exporter{% endblock %}
 
 {% block content %}
-<h2>Configuración</h2>
+<div class="page-header">
+    <div class="page-header-left">
+        <h1 class="page-title">Configuracion</h1>
+        <p class="page-subtitle">Ajustes de conexion a GESDAI y parametros de exportacion</p>
+    </div>
+</div>
 
-<form method="post" action="{{ url_for('config.save') }}" class="form">
-    <label>
-        Ruta a los DBFs de GESDAI
-        <input type="text" name="dbf_path" value="{{ valores.dbf_path|default('') }}" required>
-        <button type="button" data-action="verificar-dbf">Verificar conexión</button>
-    </label>
+<form method="post" action="{{ url_for('config.save') }}" class="form-card">
+    <div class="form-field">
+        <label class="form-label">Ruta a los DBFs de GESDAI</label>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <input type="text" name="dbf_path" class="form-input"
+                   value="{{ valores.dbf_path|default('') }}" required
+                   style="flex:1;">
+            <button type="button" data-action="verificar-dbf" class="btn-ghost">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+                Verificar
+            </button>
+        </div>
+        <div id="verify-result" class="verify-result is-ok" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+            <span id="verify-text"></span>
+        </div>
+    </div>
 
-    <label>
-        Directorio de salida (DAT)
-        <input type="text" name="exports_path" value="{{ valores.exports_path|default('') }}" required>
-    </label>
+    <div class="form-field">
+        <label class="form-label">Directorio de salida (DAT)</label>
+        <input type="text" name="exports_path" class="form-input"
+               value="{{ valores.exports_path|default('') }}" required>
+    </div>
 
-    <label>
-        Código de empresa en a3ASESOR
-        <input type="number" name="cod_empresa" min="1" max="99999"
-               value="{{ valores.cod_empresa|default('') }}" required>
-    </label>
+    <div class="form-row">
+        <div class="form-field">
+            <label class="form-label">Codigo de empresa</label>
+            <input type="number" name="cod_empresa" class="form-input" min="1" max="99999"
+                   value="{{ valores.cod_empresa|default('') }}" required>
+        </div>
+        <div class="form-field">
+            <label class="form-label">Ejercicio contable</label>
+            <input type="number" name="ejercicio" class="form-input" min="2000" max="2099"
+                   value="{{ valores.ejercicio|default('') }}" required>
+        </div>
+    </div>
 
-    <label>
-        Cuenta de ventas por defecto
-        <input type="text" name="cuenta_ventas_def" pattern="^(700|705|755)\d{3}$"
-               value="{{ valores.cuenta_ventas_def|default('700001') }}" required>
-    </label>
+    <div class="form-field">
+        <label class="form-label">Cuenta de ventas por defecto</label>
+        <input type="text" name="cuenta_ventas_def" class="form-input"
+               pattern="^(700|705|755)\d{3}$"
+               value="{{ valores.cuenta_ventas_def|default('700001') }}" required
+               style="width:200px;">
+        <span class="form-hint">Formato: 700XXX, 705XXX o 755XXX</span>
+    </div>
 
-    <label>
-        Ejercicio contable
-        <input type="number" name="ejercicio" min="2000" max="2099"
-               value="{{ valores.ejercicio|default('') }}" required>
-    </label>
+    <div class="form-field">
+        <label class="form-label">Formato de importes</label>
+        <div class="radio-group">
+            <label class="radio-item">
+                <input type="radio" name="importe_formato" value="A"
+                       {% if valores.importe_formato == 'A' %}checked{% endif %}>
+                Formato A &mdash; escala implicita (recomendado)
+                <span class="radio-detail">12,50&euro; &rarr; 00000000001250</span>
+            </label>
+            <label class="radio-item">
+                <input type="radio" name="importe_formato" value="B"
+                       {% if valores.importe_formato == 'B' %}checked{% endif %}>
+                Formato B &mdash; decimal explicito
+                <span class="radio-detail">12,50&euro; &rarr; 000000000012.50</span>
+            </label>
+        </div>
+    </div>
 
-    <fieldset>
-        <legend>Formato de importes (SUENLACE)</legend>
-        <label><input type="radio" name="importe_formato" value="A"
-                      {% if valores.importe_formato == 'A' %}checked{% endif %}>
-               A — escala implícita (recomendado)</label>
-        <label><input type="radio" name="importe_formato" value="B"
-                      {% if valores.importe_formato == 'B' %}checked{% endif %}>
-               B — decimal explícito</label>
-    </fieldset>
+    <hr class="form-divider">
 
-    <button type="submit">Guardar</button>
+    <button type="submit" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Guardar configuracion
+    </button>
 </form>
 {% endblock %}

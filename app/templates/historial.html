@@ -2,40 +2,85 @@
 {% block title %}Historial · gesdai-exporter{% endblock %}
 
 {% block content %}
-<h2>Historial de exportaciones</h2>
-
-<div class="toolbar">
-    <a href="{{ url_for('history.exportar_historial', formato='csv') }}">Exportar CSV</a>
-    <a href="{{ url_for('history.exportar_historial', formato='xlsx') }}">Exportar Excel</a>
+<div class="page-header">
+    <div class="page-header-left">
+        <h1 class="page-title">Historial de exportaciones</h1>
+        <p class="page-subtitle">Registro completo de todos los ficheros SUENLACE.DAT generados</p>
+    </div>
+    <div class="page-header-right">
+        <div class="btn-group" role="group" aria-label="Exportar historial">
+            <a href="{{ url_for('history.exportar_historial', formato='csv') }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                CSV
+            </a>
+            <a href="{{ url_for('history.exportar_historial', formato='xlsx') }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>
+                Excel
+            </a>
+        </div>
+    </div>
 </div>
 
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Fecha export</th>
-            <th>Rango</th>
-            <th>Filtros</th>
-            <th>Nº facturas</th>
-            <th>Hash SHA-256</th>
-            <th>Validado</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for e in exportaciones|default([]) %}
-        <tr data-id="{{ e.id }}">
-            <td>{{ e.fecha_export }}</td>
-            <td>{{ e.fecha_desde }} → {{ e.fecha_hasta }}</td>
-            <td><code>{{ e.filtros_json or '—' }}</code></td>
-            <td>{{ e.num_facturas }}</td>
-            <td><code>{{ e.dat_hash[:12] }}…</code></td>
-            <td>{% if e.validado %}✓{% else %}—{% endif %}</td>
-            <td>
-                <a href="{{ url_for('history.descargar_dat', exportacion_id=e.id) }}">Descargar</a>
-                <button data-action="validar">Marcar validado</button>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="table-card" style="flex:1;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th style="width:150px;">Fecha export</th>
+                <th style="width:180px;">Rango</th>
+                <th class="center" style="width:80px;">N&ordm; fact.</th>
+                <th>SHA-256</th>
+                <th class="center" style="width:90px;">Validado</th>
+                <th class="center" style="width:120px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in exportaciones|default([]) %}
+            <tr data-id="{{ e.id }}">
+                <td>
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span style="font-weight:500;">{{ e.fecha_export[:10] if e.fecha_export|length > 10 else e.fecha_export }}</span>
+                        <span class="hint" style="font-size:12px;">{{ e.fecha_export[11:16] if e.fecha_export|length > 15 else '' }}</span>
+                    </div>
+                </td>
+                <td>
+                    <span class="hint">
+                        {{ e.fecha_desde }} &rarr; {{ e.fecha_hasta }}
+                    </span>
+                </td>
+                <td class="center">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:24px; border-radius:6px; background:var(--primary-light); color:var(--primary); font-weight:600; font-size:13px;">
+                        {{ e.num_facturas }}
+                    </span>
+                </td>
+                <td><code>{{ e.dat_hash[:12] }}...</code></td>
+                <td class="center">
+                    {% if e.validado %}
+                        <span class="action-icon is-success" title="Validado">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+                        </span>
+                    {% else %}
+                        <span class="action-icon is-muted" title="No validado">&mdash;</span>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    <div class="action-icons">
+                        <a href="{{ url_for('history.descargar_dat', exportacion_id=e.id) }}"
+                           class="action-icon" title="Descargar DAT">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+                        </a>
+                        {% if not e.validado %}
+                        <button class="action-icon" data-action="validar" title="Marcar validado">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                        </button>
+                        {% endif %}
+                        <button class="action-icon" data-action="eliminar" title="Eliminar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}

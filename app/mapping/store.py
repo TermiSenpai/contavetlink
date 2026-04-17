@@ -41,6 +41,15 @@ class SubcuentaInvalidaError(ValueError):
     """La subcuenta no respeta el formato exigido por a3ASESOR."""
 
 
+class CuentaDuplicadaError(ValueError):
+    """Otra fila ya tiene asignada esa subcuenta.
+
+    Las subcuentas (430XXX para clientes, 700/705/755XXX para ingresos) deben
+    ser únicas dentro de su tabla — un mismo código contable no puede
+    representar a dos clientes distintos ni a dos artículos distintos.
+    """
+
+
 def validar_subcuenta_cliente(subcuenta: str) -> str:
     """Devuelve la subcuenta si cumple `^430\\d{3}$`. Lanza si no."""
     if not isinstance(subcuenta, str) or not RE_SUBCUENTA_CLIENTE.match(subcuenta):
@@ -181,8 +190,18 @@ def set_subcuenta_cliente(
     codigo: str,
     subcuenta_a3: str,
 ) -> None:
-    """Cambia la subcuenta de un cliente. Lanza si no existe o si es inválida."""
+    """Cambia la subcuenta de un cliente. Lanza si no existe, es inválida o
+    ya está asignada a otro cliente."""
     validar_subcuenta_cliente(subcuenta_a3)
+    dup = conn.execute(
+        "SELECT codigo_gesdai FROM mappings_clientes "
+        "WHERE subcuenta_a3 = ? AND codigo_gesdai != ?",
+        (subcuenta_a3, codigo),
+    ).fetchone()
+    if dup is not None:
+        raise CuentaDuplicadaError(
+            f"La subcuenta {subcuenta_a3} ya está asignada al cliente {dup[0]}"
+        )
     cur = conn.execute(
         "UPDATE mappings_clientes SET subcuenta_a3 = ? WHERE codigo_gesdai = ?",
         (subcuenta_a3, codigo),
@@ -325,6 +344,15 @@ def set_cuenta_articulo(
     cuenta_a3: str,
 ) -> None:
     validar_subcuenta_ingreso(cuenta_a3)
+    dup = conn.execute(
+        "SELECT clave_gesdai FROM mappings_articulos "
+        "WHERE cuenta_a3 = ? AND clave_gesdai != ?",
+        (cuenta_a3, clave),
+    ).fetchone()
+    if dup is not None:
+        raise CuentaDuplicadaError(
+            f"La cuenta {cuenta_a3} ya está asignada al artículo {dup[0]}"
+        )
     cur = conn.execute(
         "UPDATE mappings_articulos SET cuenta_a3 = ? WHERE clave_gesdai = ?",
         (cuenta_a3, clave),

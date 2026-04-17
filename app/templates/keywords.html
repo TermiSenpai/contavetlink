@@ -2,52 +2,106 @@
 {% block title %}Keywords · gesdai-exporter{% endblock %}
 
 {% block content %}
-<h2>Keywords de resolución automática</h2>
-<p class="hint">
-    El motor busca cada keyword en el texto del artículo (case-insensitive). El primer
-    match por <strong>prioridad descendente</strong> gana.
-</p>
+<div class="page-header">
+    <div class="page-header-left">
+        <h1 class="page-title">Keywords de resolucion</h1>
+        <p class="page-subtitle">Reglas automaticas para asignar cuentas contables a articulos por palabra clave</p>
+    </div>
+</div>
 
-<form method="post" action="{{ url_for('keywords.create') }}" class="form inline-form">
-    <input type="text" name="keyword" placeholder="palabra clave" required>
-    <input type="text" name="cuenta_a3" pattern="^(700|705|755)\d{3}$"
-           maxlength="6" placeholder="700XXX" required>
-    <input type="number" name="prioridad" value="10" min="1" max="100">
-    <button type="submit">Añadir</button>
-</form>
+<div class="keywords-layout">
+    <div class="keywords-left">
+        <div class="card">
+            <div class="card-header" style="margin-bottom:16px;">
+                <h3 class="card-title">Anadir keyword</h3>
+            </div>
+            <form method="post" action="{{ url_for('keywords.create') }}">
+                <div class="keyword-form-row">
+                    <div class="form-field" style="flex:2;">
+                        <label class="form-label">Keyword</label>
+                        <input type="text" name="keyword" placeholder="palabra clave" required class="form-input">
+                    </div>
+                    <div class="form-field" style="flex:1;">
+                        <label class="form-label">Cuenta a3</label>
+                        <input type="text" name="cuenta_a3" pattern="^(700|705|755)\d{3}$"
+                               maxlength="6" placeholder="700XXX" required class="form-input">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Prioridad</label>
+                        <input type="number" name="prioridad" value="10" min="1" max="100"
+                               class="form-input" style="width:80px;">
+                    </div>
+                    <div class="form-field" style="align-self:flex-end;">
+                        <button type="submit" class="btn-primary" style="padding:10px 16px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                            Anadir
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
 
-<table class="data-table" id="tabla-keywords">
-    <thead>
-        <tr>
-            <th>Keyword</th>
-            <th>Cuenta a3</th>
-            <th>Prioridad</th>
-            <th>Activo</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for k in keywords|default([]) %}
-        <tr data-id="{{ k.id }}">
-            <td>{{ k.keyword }}</td>
-            <td>{{ k.cuenta_a3 }}</td>
-            <td>{{ k.prioridad }}</td>
-            <td>{% if k.activo %}✓{% else %}—{% endif %}</td>
-            <td>
-                <button data-action="editar">Editar</button>
-                <button data-action="eliminar">Eliminar</button>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+        <div class="table-card" style="flex:1;">
+            <table class="data-table" id="tabla-keywords">
+                <thead>
+                    <tr>
+                        <th>Keyword</th>
+                        <th>Cuenta a3</th>
+                        <th class="center">Prioridad</th>
+                        <th class="center">Activo</th>
+                        <th class="center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for k in keywords|default([]) %}
+                    <tr data-id="{{ k.id }}">
+                        <td style="font-weight:500;">{{ k.keyword }}</td>
+                        <td><code>{{ k.cuenta_a3 }}</code></td>
+                        <td class="center">
+                            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:28px; padding:2px 8px; border-radius:6px; background:var(--primary-light); color:var(--primary); font-weight:600; font-size:12px;">
+                                {{ k.prioridad }}
+                            </span>
+                        </td>
+                        <td class="center">
+                            <label class="toggle-wrap">
+                                <input type="checkbox" class="toggle-input"
+                                       {% if k.activo %}checked{% endif %}
+                                       data-action="toggle-activo">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </td>
+                        <td class="center">
+                            <div class="action-icons">
+                                <button class="action-icon" data-action="editar" title="Editar">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                                </button>
+                                <button class="action-icon" data-action="eliminar" title="Eliminar">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-<section class="probador">
-    <h3>Probar texto</h3>
-    <form id="form-probar" method="post" action="{{ url_for('keywords.probar') }}">
-        <input type="text" name="texto" placeholder="texto del artículo" required>
-        <button type="submit">Probar</button>
-    </form>
-    <div id="resultado-probar"></div>
-</section>
+    <div class="keywords-right">
+        <div class="tester-card">
+            <h3>Probar keywords</h3>
+            <p class="hint" style="margin:0 0 14px;">Introduce una descripcion de articulo para ver que keyword la resuelve.</p>
+            <form id="form-probar" method="post" action="{{ url_for('keywords.probar') }}">
+                <div class="tester-input-row">
+                    <input type="text" name="texto" placeholder="Vacunacion triple felina..." required>
+                    <button type="submit" class="btn-primary" style="width:100%;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Probar
+                    </button>
+                </div>
+            </form>
+            <div id="resultado-probar"></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
