@@ -18,7 +18,19 @@
       "Bash(find *)",
       "Bash(grep *)",
       "Bash(cd *)",
-      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force }')"
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force }')",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }')",
+      "Bash(cmd.exe /c \"dir /b \\\\\"E:\\\\Custom apps\\\\contavetlink\\\\tests\\\\data\\\\DATA_DEV\\\\\"\")",
+      "Bash(powershell -Command \"Get-ChildItem 'E:\\\\Custom apps\\\\contavetlink\\\\tests\\\\data\\\\DATA_DEV' | Select-Object Name\")",
+      "Bash(powershell -Command \"Get-ChildItem 'E:\\\\Custom apps\\\\contavetlink\\\\tests\\\\data\\\\DATA_DEV' -Force | Select-Object Name, Length\")",
+      "Bash(powershell -Command \"Get-ChildItem 'E:\\\\Custom apps\\\\contavetlink\\\\DATA_DEV' -Force | Select-Object Name, Length\")",
+      "Bash(powershell -Command 'Get-ChildItem '\\\\''E:\\\\Custom apps\\\\contavetlink\\\\DATA_DEV'\\\\'' -Force | Where-Object { $_.Name -notin @\\('\\\\''cfactura.dbf'\\\\'','\\\\''cfactura.fpt'\\\\'','\\\\''lfactura.dbf'\\\\'','\\\\''lfactura.fpt'\\\\'','\\\\''clientes.dbf'\\\\'','\\\\''clientes.fpt'\\\\'','\\\\''material.dbf'\\\\'','\\\\''material.fpt'\\\\''\\) } | Measure-Object | Select-Object Count')",
+      "Bash(powershell -Command 'Get-ChildItem '\\\\''E:\\\\Custom apps\\\\contavetlink\\\\DATA_DEV'\\\\'' -Force | Where-Object { $_.Name -notin @\\('\\\\''cfactura.dbf'\\\\'','\\\\''cfactura.fpt'\\\\'','\\\\''lfactura.dbf'\\\\'','\\\\''lfactura.fpt'\\\\'','\\\\''clientes.dbf'\\\\'','\\\\''clientes.fpt'\\\\'','\\\\''material.dbf'\\\\'','\\\\''material.fpt'\\\\''\\) } | Remove-Item -Force')",
+      "Bash(flask --app app run --debug --port 5001)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "Bash(start //b flask --app app run --debug --port 5001)",
+      "mcp__playwright__browser_tabs"
     ],
     "deny": [
       "Bash(rm -rf *)",
