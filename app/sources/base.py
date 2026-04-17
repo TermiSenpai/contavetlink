@@ -34,11 +34,12 @@ class Articulo:
 class LineaFactura:
     codigo_factura: str
     linea: int
-    articulo: str        # clave o texto libre
+    articulo: str        # clave del catálogo (puede estar vacía si es texto libre)
     cantidad: Decimal
     precio: Decimal
     iva: Decimal
     total_linea: Decimal
+    comentario: str = ''  # descripción libre (campo COMENTARIO en lfactura)
 
 
 @dataclass

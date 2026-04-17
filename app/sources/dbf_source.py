@@ -46,7 +46,7 @@ CAMPOS_FACTURA = (
     'PTSBASE3', 'IVA3', 'RECEQUI3',
     'RETIRPF', 'CONTABIL',
 )
-CAMPOS_LINEA = ('CODIGO', 'LINEA', 'ARTICULO', 'CANTIDAD', 'PRECIOV', 'IVA', 'TOTLINEA')
+CAMPOS_LINEA = ('CODIGO', 'LINEA', 'ARTICULO', 'COMENTARIO', 'CANTIDAD', 'PRECIOV', 'IVA', 'TOTLINEA')
 CAMPOS_CLIENTE = ('CODIGO', 'NOMBRE', 'NIF')
 CAMPOS_MATERIAL = ('CLAVEMATE', 'DESCRIPCIO')
 
@@ -192,6 +192,7 @@ class DbfSource(DataSource):
                     precio=_dec(registro['PRECIOV']),
                     iva=_dec(registro['IVA']),
                     total_linea=_dec(registro['TOTLINEA']),
+                    comentario=_str(registro['COMENTARIO']),
                 )
                 agrupadas.setdefault(linea.codigo_factura, []).append(linea)
         for lineas in agrupadas.values():
