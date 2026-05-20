@@ -62,6 +62,14 @@ dist/
 *.swo
 *~
 
+# --- Capturas y artefactos de revisión visual (no parte del repo) ---
+.playwright-mcp/
+combobox-*.png
+modal-*.png
+export-*.png
+preview-*.png
+ui-*.png
+
 # --- Sistema ---
 Thumbs.db
 Desktop.ini
