@@ -92,14 +92,14 @@
     </div>
 
     <div class="table-card" style="flex:1;">
-        <table class="data-table" id="tabla-preview">
+        <table class="data-table editable-table" id="tabla-preview">
             <thead>
                 <tr>
                     <th style="width:40px;"></th>
                     <th>Factura</th>
                     <th>Fecha</th>
                     <th>Cliente</th>
-                    <th>Subcuenta</th>
+                    <th style="width:140px;">Subcuenta</th>
                     <th class="right">Total c/IVA</th>
                     <th>Notas</th>
                 </tr>
@@ -107,6 +107,7 @@
             <tbody>
                 {% for f in preview.facturas|default([]) %}
                 <tr data-semaforo="{{ f.semaforo }}" data-codigo="{{ f.codigo }}"
+                    data-cliente="{{ f.cliente_codigo }}"
                     class="semaforo-{{ f.semaforo }} preview-row" style="cursor:pointer;">
                     <td>
                         {% if f.semaforo == 'verde' %}🟢
@@ -118,7 +119,17 @@
                     <td class="mono">{{ f.serie }}{{ f.numero }}</td>
                     <td>{{ f.fecha }}</td>
                     <td>{{ f.cliente_codigo }}</td>
-                    <td><code>{{ f.subcuenta or '—' }}</code></td>
+                    <td>
+                        <input type="text"
+                               pattern="^430\d{3}$"
+                               maxlength="6"
+                               inputmode="numeric"
+                               value="{{ f.subcuenta or '' }}"
+                               data-autosave="cliente"
+                               data-id="{{ f.cliente_codigo }}"
+                               data-last="{{ f.subcuenta or '' }}"
+                               placeholder="430001">
+                    </td>
                     <td class="right">{{ f.total }} &euro;</td>
                     <td class="hint">{{ f.mensaje }}</td>
                 </tr>
@@ -192,7 +203,7 @@
         </div>
 
         <div class="modal-table-wrap">
-            <table class="data-table" id="md-tabla-lineas">
+            <table class="data-table editable-table" id="md-tabla-lineas">
                 <thead>
                     <tr>
                         <th>Articulo</th>
@@ -200,7 +211,7 @@
                         <th class="right">Cant.</th>
                         <th class="right">Precio</th>
                         <th class="right">Total</th>
-                        <th class="center">Cuenta</th>
+                        <th class="center" style="width:140px;">Cuenta</th>
                     </tr>
                 </thead>
                 <tbody id="md-lineas-body"></tbody>

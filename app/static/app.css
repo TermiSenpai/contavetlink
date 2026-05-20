@@ -1395,3 +1395,58 @@ code    {
     color: var(--text-secondary);
     font-weight: 500;
 }
+
+/* ---------- Combobox reusable (autocompletado) ---------- */
+
+.combobox-dropdown {
+    position: fixed;
+    z-index: 2000;                  /* por encima del modal-overlay (~1000) */
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(17, 24, 39, 0.14);
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 4px;
+    font-size: 12.5px;
+}
+
+.combobox-dropdown[hidden] {
+    display: none;
+}
+
+.combobox-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.combobox-item:hover,
+.combobox-item.is-active {
+    background: var(--primary);
+    color: #FFFFFF;
+}
+
+.combobox-value {
+    font-family: "Geist Mono", "JetBrains Mono", "SF Mono", Consolas, monospace;
+    font-weight: 600;
+    min-width: 64px;
+    flex-shrink: 0;
+}
+
+.combobox-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.combobox-item:hover .combobox-label,
+.combobox-item.is-active .combobox-label {
+    color: rgba(255, 255, 255, 0.88);
+}

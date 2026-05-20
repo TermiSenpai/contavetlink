@@ -168,6 +168,37 @@ def clientes_export():
 # ─── Artículos ─────────────────────────────────────────────────────────────
 
 
+@bp.get('/articulos/cuentas')
+def articulos_cuentas_catalog():
+    """Catálogo de cuentas 700/705/755 conocidas para el combobox del modal.
+
+    Devuelve la lista distinct de `(cuenta_a3, descripcion)` de los artículos
+    ya revisados — son las cuentas que el operador ha bendecido manualmente
+    y que tienen un nombre representativo. Las cuentas sin revisar quedan
+    fuera porque su descripción aún es la clave bruta de GESDAI y no aporta.
+    Las cuentas se ordenan por número ascendente.
+    """
+    conn = get_db()
+    rows = conn.execute(
+        """
+        SELECT cuenta_a3, descripcion
+        FROM mappings_articulos
+        WHERE revisado = 1
+          AND cuenta_a3 IS NOT NULL
+          AND cuenta_a3 != ''
+        GROUP BY cuenta_a3
+        ORDER BY cuenta_a3
+        """
+    ).fetchall()
+    return jsonify(
+        ok=True,
+        cuentas=[
+            {'cuenta': r['cuenta_a3'], 'descripcion': r['descripcion'] or ''}
+            for r in rows
+        ],
+    )
+
+
 @bp.get('/articulos')
 def articulos_index():
     conn = get_db()
