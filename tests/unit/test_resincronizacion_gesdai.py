@@ -27,8 +27,6 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-import pytest
-
 from app.exporter.builder import Builder
 from app.mapping import sync as sync_mod
 from app.mapping.resolver import Resolver, TipoResolucion
@@ -39,11 +37,9 @@ from app.mapping.store import (
     marcar_cliente_revisado,
     set_cuenta_articulo,
     set_subcuenta_cliente,
-    upsert_articulo_mapping,
     upsert_cliente_mapping,
 )
-from app.sources.base import Articulo, Cliente, DataSource, Factura, Filtros, LineaFactura
-
+from app.sources.base import Articulo, Cliente, DataSource, Factura, Filtros
 
 # ─── Fuente de datos fake ─────────────────────────────────────────────────
 

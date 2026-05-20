@@ -21,11 +21,10 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import dbf as d
-
 
 # Campos cuyo tipo necesita pasar de N(x,0) a N(x,2) para soportar céntimos.
 CFACTURA_MONEY_TO_2DEC = {

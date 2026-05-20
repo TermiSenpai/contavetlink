@@ -26,7 +26,6 @@ from pathlib import Path
 
 import dbf as d
 
-
 VINCULOS: dict[tuple[str, int], str] = {
     ('FAC0000045', 1): 'CHIP',
     ('FAC0000045', 2): 'PASAPORTE',

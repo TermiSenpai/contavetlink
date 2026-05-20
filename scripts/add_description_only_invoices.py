@@ -17,7 +17,6 @@ from pathlib import Path
 
 import dbf as d
 
-
 NUEVAS = [
     {
         'numero': '000044',
@@ -90,7 +89,7 @@ def main() -> int:
                     print(f"  skip {codigo} (ya existe)")
                     continue
 
-                base = sum((l['cantidad'] * l['precio'] for l in f['lineas']), Decimal('0'))
+                base = sum((linea['cantidad'] * linea['precio'] for linea in f['lineas']), Decimal('0'))
                 total_iva = (base * Decimal('0.21')).quantize(Decimal('0.01'))
                 total_con_iva = base + total_iva
 
