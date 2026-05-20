@@ -170,8 +170,10 @@ class Builder:
 
         # Side-effect: resolver cada línea para dejar rastro en mappings_articulos.
         # No alimenta los detalles — en v1.0 todos usan cuenta_ventas_def.
+        # El comentario se pasa para que las líneas de texto libre (clave vacía)
+        # también puedan resolverse vía keyword.
         tipos_resolucion = [
-            self.resolver.resolver_articulo(linea.articulo)
+            self.resolver.resolver_articulo(linea.articulo, linea.comentario)
             for linea in factura.lineas
         ]
 

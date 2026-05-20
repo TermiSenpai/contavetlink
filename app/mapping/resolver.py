@@ -70,12 +70,22 @@ class Resolver:
 
     # ─── Artículos ─────────────────────────────────────────────────────────
 
-    def resolver_articulo(self, clave_raw: str | None) -> ResolucionArticulo:
+    def resolver_articulo(
+        self,
+        clave_raw: str | None,
+        comentario: str = '',
+    ) -> ResolucionArticulo:
         """Resuelve una clave de artículo a su cuenta contable.
 
         Aplica el pipeline en orden: mapping → keyword → default. Si entra
         por keyword o default, persiste el resultado en `mappings_articulos`
         como pendiente de revisión para que aparezca en la UI.
+
+        Para líneas de texto libre (clave vacía) las keywords se evalúan
+        contra el `comentario` de la línea. Esto permite al operador definir
+        keywords sobre descripciones libres (p.ej. "revision pre-quirurgica"
+        → 700020) y que se apliquen automáticamente a futuras facturas con
+        el mismo texto.
         """
         clave = (clave_raw or '').strip()
 
@@ -90,7 +100,11 @@ class Resolver:
                     existente['cuenta_a3'], TipoResolucion.MAPPING,
                 )
 
-            kw = match(clave, self._keywords)
+            # En líneas con clave, las keywords se prueban primero contra la
+            # clave (catálogo: 'CHIP', 'PASAPORTE'...) y, si no hay
+            # coincidencia, contra el comentario por si la descripción libre
+            # añade contexto útil ("CHIP-OFR" + comentario "promocion").
+            kw = match(clave, self._keywords) or match(comentario, self._keywords)
             if kw is not None:
                 upsert_articulo_mapping(
                     self.conn,
@@ -107,6 +121,13 @@ class Resolver:
                 descripcion=clave[:255],
                 cuenta_a3=self.cuenta_default,
             )
+        elif comentario:
+            # Línea de texto libre: keywords se evalúan contra la descripción
+            # libre. No hay clave que persistir — la asociación
+            # comentario → cuenta vive sólo en `keywords_articulos`.
+            kw = match(comentario, self._keywords)
+            if kw is not None:
+                return ResolucionArticulo(kw.cuenta_a3, TipoResolucion.KEYWORD)
 
         return ResolucionArticulo(self.cuenta_default, TipoResolucion.DEFAULT)
 

@@ -218,7 +218,7 @@ def factura_detalle(codigo: str):
     # Resolver cada línea
     lineas_out = []
     for linea in factura.lineas:
-        res_art = resolver.resolver_articulo(linea.articulo)
+        res_art = resolver.resolver_articulo(linea.articulo, linea.comentario)
         lineas_out.append({
             'articulo': linea.articulo,
             'comentario': linea.comentario,
