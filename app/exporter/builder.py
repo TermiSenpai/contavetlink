@@ -206,18 +206,24 @@ class Builder:
         fecha_str: str,
         numfac: str,
     ) -> list[RegistroDetalle]:
-        """Emite un detalle por cada (PTSBASEn, IVAn, RECEQUIn) con base > 0.
+        """Emite un detalle por cada (PTSBASEn, IVAn, RECEQUIn) con base != 0.
 
         El último detalle lleva `orden='U'`, los anteriores `'M'`. Si la
-        factura no tiene NINGUNA base positiva (caso degenerado, no debería
-        pasar en prod), devuelve lista vacía y el cuadre habrá avisado antes.
+        factura no tiene NINGUNA base distinta de cero, devuelve lista vacía
+        y el cuadre habrá avisado antes.
+
+        Las bases NEGATIVAS son legítimas: COLVET emite ocasionalmente
+        "rectificativas informales" como ingresos en negativo en lugar de
+        seguir el flujo formal de factura rectificativa. Filtrar solo `> 0`
+        descartaría esos tramos y produciría un DAT corrupto (cabecera sin
+        detalles) sin avisar.
         """
         tramos = [
             (factura.ptsbase1, factura.iva1, factura.recequi1),
             (factura.ptsbase2, factura.iva2, factura.recequi2),
             (factura.ptsbase3, factura.iva3, factura.recequi3),
         ]
-        activos = [(base, iva, rec) for base, iva, rec in tramos if base > 0]
+        activos = [(base, iva, rec) for base, iva, rec in tramos if base != 0]
         if not activos:
             return []
 
