@@ -180,3 +180,41 @@ def test_operador_entre_con_valor_invalido():
     cond = Condicion('fecha', OperadorCondicion.ENTRE, '2026-01-01')
     with pytest.raises(ValueError, match='ENTRE requiere'):
         aplica_filtros(Filtros(condiciones=[cond]), _factura())
+
+
+# ─── Facturas sin FECHA en GESDAI ─────────────────────────────────────────
+
+
+def _factura_sin_fecha() -> Factura:
+    """Factura con FECHA vacía — modela una cabecera mal introducida en GESDAI."""
+    return Factura(
+        codigo='2026000195', serie='2026', numero='000195',
+        cliente_codigo='CLI00001', fecha=None,
+        total_base=Decimal('100'), total_con_iva=Decimal('121'),
+        ptsbase1=Decimal('100'), iva1=Decimal('21'), recequi1=Decimal('0'),
+        ptsbase2=Decimal('0'), iva2=Decimal('0'), recequi2=Decimal('0'),
+        ptsbase3=Decimal('0'), iva3=Decimal('0'), recequi3=Decimal('0'),
+        retirpf=Decimal('0'), contabil=False,
+    )
+
+
+def test_factura_sin_fecha_pasa_cualquier_filtro_de_fecha():
+    """Sin esta excepción las facturas sin FECHA desaparecen del preview
+    aunque el contable filtre por un rango razonable, creando huecos en
+    la secuencia de números."""
+    cond = Condicion('fecha', OperadorCondicion.ENTRE, ('2026-01-01', '2026-01-31'))
+    assert aplica_filtros(Filtros(condiciones=[cond]), _factura_sin_fecha()) is True
+
+
+def test_factura_sin_fecha_sigue_respetando_otros_filtros_en_and():
+    """`fecha` se ignora cuando no hay valor que comparar, pero `cliente`,
+    `serie`, etc. se evalúan normalmente — si no, los huecos se llenarían
+    con facturas de otros clientes."""
+    filtros = Filtros(
+        operador=OperadorFiltro.AND,
+        condiciones=[
+            Condicion('fecha', OperadorCondicion.ENTRE, ('2026-01-01', '2026-01-31')),
+            Condicion('cliente', OperadorCondicion.IGUAL, 'CLI99999'),
+        ],
+    )
+    assert aplica_filtros(filtros, _factura_sin_fecha()) is False

@@ -141,20 +141,45 @@ class DbfSource(DataSource):
         y luego iterar `cfactura` aplicando el filtro factura a factura. Para
         los volúmenes esperados (~552 clientes, ~varios miles de facturas) es
         ampliamente suficiente y mantiene la implementación trivial.
+
+        Saltamos los registros borrados de FoxPro (flag `*`, sin PACK). Las
+        facturas con FECHA vacía se incluyen (con `fecha=None`) sólo si su
+        NUMERO cae dentro del rango cubierto por las facturas fechadas que
+        sí casan con el filtro — así rellenan huecos reales en la secuencia
+        ("si entre 200 y 300 falta la 250, se añade") sin contaminar la
+        preview con cabeceras incompletas de otros meses.
         """
         lineas_por_factura = self._cargar_lineas()
 
-        seleccionadas: list[Factura] = []
+        con_fecha: list[Factura] = []
+        sin_fecha_candidatas: list[Factura] = []
         with self._open_table(TABLA_FACTURAS) as tabla:
             for registro in tabla:
+                if dbf_lib.is_deleted(registro):
+                    continue
                 factura = self._row_to_factura(registro, lineas_por_factura)
-                if aplica_filtros(filtros, factura):
-                    seleccionadas.append(factura)
-        return seleccionadas
+                if not aplica_filtros(filtros, factura):
+                    continue
+                if factura.fecha is None:
+                    sin_fecha_candidatas.append(factura)
+                else:
+                    con_fecha.append(factura)
+
+        if not sin_fecha_candidatas:
+            return con_fecha
+
+        rangos = _rangos_numero_por_serie(con_fecha)
+        sin_fecha_en_rango = [
+            f for f in sin_fecha_candidatas
+            if _en_rango(f, rangos)
+        ]
+        return con_fecha + sin_fecha_en_rango
 
     def get_cliente(self, codigo: str) -> Cliente:
         with self._open_table(TABLA_CLIENTES) as tabla:
             for registro in tabla:
+                if dbf_lib.is_deleted(registro):
+                    continue
                 if _str(registro['CODIGO']) == codigo:
                     return _row_to_cliente(registro)
         raise KeyError(f"Cliente no encontrado: {codigo}")
@@ -163,6 +188,8 @@ class DbfSource(DataSource):
         clientes: list[Cliente] = []
         with self._open_table(TABLA_CLIENTES) as tabla:
             for registro in tabla:
+                if dbf_lib.is_deleted(registro):
+                    continue
                 clientes.append(_row_to_cliente(registro))
         return clientes
 
@@ -170,6 +197,8 @@ class DbfSource(DataSource):
         articulos: list[Articulo] = []
         with self._open_table(TABLA_MATERIAL) as tabla:
             for registro in tabla:
+                if dbf_lib.is_deleted(registro):
+                    continue
                 articulos.append(
                     Articulo(
                         clave=_str(registro['CLAVEMATE']),
@@ -184,6 +213,8 @@ class DbfSource(DataSource):
         agrupadas: dict[str, list[LineaFactura]] = {}
         with self._open_table(TABLA_LINEAS) as tabla:
             for registro in tabla:
+                if dbf_lib.is_deleted(registro):
+                    continue
                 linea = LineaFactura(
                     codigo_factura=_str(registro['CODIGO']),
                     linea=int(registro['LINEA'] or 0),
@@ -204,13 +235,23 @@ class DbfSource(DataSource):
         registro: Any,
         lineas_por_factura: dict[str, list[LineaFactura]],
     ) -> Factura:
+        """Convierte un registro DBF a `Factura`.
+
+        Las facturas con FECHA vacía se devuelven con `fecha=None`: aparecen
+        en la preview con semáforo ROJO para que el contable pueda corregir
+        GESDAI, en lugar de ser silenciadas y crear huecos invisibles en la
+        secuencia de números.
+        """
         codigo = _str(registro['CODIGO'])
+        fecha = _fecha_opt(registro['FECHA'])
+        if fecha is None:
+            log.warning("Factura %s sin FECHA — aparecerá en preview como ROJO", codigo)
         return Factura(
             codigo=codigo,
             serie=_str(registro['SERIE']),
             numero=_str(registro['NUMERO']),
             cliente_codigo=_str(registro['CLIENTE']),
-            fecha=_fecha(registro['FECHA']),
+            fecha=fecha,
             total_base=_dec(registro['TOTPTS']),
             total_con_iva=_dec(registro['TOTCONIVA']),
             ptsbase1=_dec(registro['PTSBASE1']),
@@ -247,11 +288,17 @@ def _dec(valor: Any) -> Decimal:
     return Decimal(str(valor))
 
 
-def _fecha(valor: Any) -> date:
-    """Devuelve un `date`. Lanza si el campo está vacío — una factura sin fecha
-    es un dato corrupto y debe parar la fase, no propagarse."""
+def _fecha_opt(valor: Any) -> date | None:
+    """Devuelve un `date` o `None` si el campo está vacío.
+
+    Un FECHA vacío (None) NO es fatal — corresponde a una factura mal
+    introducida en GESDAI (cabecera creada sin guardar la fecha). El caller
+    debe omitir la factura y avisar al operador. Sí lanzamos si el tipo
+    es inesperado: eso sería un cambio de esquema de GESDAI y debe parar
+    la fase para no propagar datos corruptos al exporter.
+    """
     if valor is None:
-        raise DbfSchemaError("Campo FECHA vacío en cfactura — dato corrupto")
+        return None
     if isinstance(valor, date):
         return valor
     raise DbfSchemaError(f"Tipo inesperado para FECHA: {type(valor).__name__}")
@@ -263,3 +310,35 @@ def _row_to_cliente(registro: Any) -> Cliente:
         nombre=_str(registro['NOMBRE']),
         nif=_str(registro['NIF']) or None,
     )
+
+
+def _rangos_numero_por_serie(
+    facturas: list[Factura],
+) -> dict[str, tuple[str, str]]:
+    """Calcula `{SERIE: (NUMERO_min, NUMERO_max)}` sobre las facturas dadas.
+
+    NUMERO es un string zero-padded en GESDAI ('000338'), así que la comparación
+    lexicográfica coincide con la numérica mientras la longitud no varíe — algo
+    que el formato fijo de cfactura garantiza.
+    """
+    rangos: dict[str, tuple[str, str]] = {}
+    for f in facturas:
+        serie = f.serie.strip()
+        numero = f.numero.strip()
+        if not numero:
+            continue
+        actual = rangos.get(serie)
+        if actual is None:
+            rangos[serie] = (numero, numero)
+        else:
+            lo, hi = actual
+            rangos[serie] = (min(lo, numero), max(hi, numero))
+    return rangos
+
+
+def _en_rango(factura: Factura, rangos: dict[str, tuple[str, str]]) -> bool:
+    rango = rangos.get(factura.serie.strip())
+    if rango is None:
+        return False
+    lo, hi = rango
+    return lo <= factura.numero.strip() <= hi

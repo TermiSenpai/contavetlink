@@ -354,7 +354,7 @@
             tr.innerHTML = `
                 <td>${icono}${warn}</td>
                 <td class="mono">${escapeHtml(f.serie)}${escapeHtml(f.numero)}</td>
-                <td>${escapeHtml(f.fecha)}</td>
+                <td>${escapeHtml(f.fecha || 'Sin fecha')}</td>
                 <td>${escapeHtml(f.cliente_codigo)}</td>
                 <td>
                     <input type="text"
@@ -463,7 +463,7 @@
 
             // Header
             set('md-title', 'Factura ' + f.serie + f.numero);
-            set('md-subtitle', f.fecha + ' · Serie ' + f.serie + ' · ' + cli.nombre);
+            set('md-subtitle', (f.fecha || 'Sin fecha') + ' · Serie ' + f.serie + ' · ' + cli.nombre);
 
             // Meta
             set('md-cliente', cli.nombre);

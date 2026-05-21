@@ -294,7 +294,7 @@ def preview_excel():
         ws.append([
             entrada.color.value,
             f"{entrada.factura.serie.strip()}{entrada.factura.numero.strip()}",
-            entrada.factura.fecha.isoformat(),
+            entrada.factura.fecha.isoformat() if entrada.factura.fecha else '',
             entrada.factura.cliente_codigo,
             subcuenta,
             str(entrada.factura.total_con_iva),

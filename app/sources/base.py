@@ -48,7 +48,10 @@ class Factura:
     serie: str
     numero: str
     cliente_codigo: str
-    fecha: date
+    # `None` cuando la cabecera de GESDAI no tiene FECHA — la factura sigue
+    # apareciendo en la preview (ROJO, bloquea exportación) para que el contable
+    # la corrija. Solo el flujo de generación de DAT exige fecha real.
+    fecha: date | None
     total_base: Decimal
     total_con_iva: Decimal
     ptsbase1: Decimal

@@ -113,10 +113,11 @@ def test_get_facturas_sin_filtros_devuelve_todas(data_dev_dir):
     src = DbfSource(data_dev_dir)
     facturas = src.get_facturas(Filtros())
     assert len(facturas) > 0
-    f = facturas[0]
-    assert isinstance(f, Factura)
-    assert isinstance(f.fecha, date)
-    assert isinstance(f.total_con_iva, Decimal)
+    assert all(isinstance(f, Factura) for f in facturas)
+    con_fecha = [f for f in facturas if f.fecha is not None]
+    assert con_fecha, "DATA_DEV debe tener al menos una factura con FECHA"
+    assert isinstance(con_fecha[0].fecha, date)
+    assert isinstance(facturas[0].total_con_iva, Decimal)
 
 
 # ─── Garantías sobre los datos cargados ────────────────────────────────────
@@ -166,7 +167,9 @@ def test_filtro_fecha_entre_recorta_resultados(data_dev_dir):
     todas = src.get_facturas(Filtros())
     # Tomamos un rango estrecho centrado en una factura real para evitar
     # depender de los límites concretos del DATA_DEV.
-    pivote = todas[0].fecha
+    con_fecha = [f for f in todas if f.fecha is not None]
+    assert con_fecha, "DATA_DEV no tiene ninguna factura con FECHA"
+    pivote = con_fecha[0].fecha
     rango = Filtros(
         condiciones=[
             Condicion(
@@ -177,8 +180,11 @@ def test_filtro_fecha_entre_recorta_resultados(data_dev_dir):
         ],
     )
     resultado = src.get_facturas(rango)
-    assert resultado, "El pivote debería incluirse a sí mismo"
-    assert all(f.fecha == pivote for f in resultado)
+    # Las facturas sin FECHA siempre pasan el filtro de fecha (aparecen en
+    # preview como ROJO) — las ignoramos para verificar el recorte real.
+    fechadas = [f for f in resultado if f.fecha is not None]
+    assert fechadas, "El pivote debería incluirse a sí mismo"
+    assert all(f.fecha == pivote for f in fechadas)
 
 
 def test_filtro_cliente_or(data_dev_dir):
@@ -202,7 +208,9 @@ def test_filtro_cliente_or(data_dev_dir):
 def test_filtro_anidado_and_or_sobre_fuente_real(data_dev_dir):
     src = DbfSource(data_dev_dir)
     todas = src.get_facturas(Filtros())
-    pivote = todas[0]
+    con_fecha = [f for f in todas if f.fecha is not None]
+    assert con_fecha, "DATA_DEV no tiene ninguna factura con FECHA"
+    pivote = con_fecha[0]
     filtros = Filtros(
         operador=OperadorFiltro.AND,
         condiciones=[
@@ -225,6 +233,9 @@ def test_filtro_anidado_and_or_sobre_fuente_real(data_dev_dir):
 
 
 def test_rango_imposible_devuelve_lista_vacia(data_dev_dir):
+    """Un rango sin fechadas tampoco arrastra a las sin-fecha: sin un rango
+    de NUMERO con el que comparar, no hay hueco que rellenar y la preview
+    queda vacía limpiamente."""
     src = DbfSource(data_dev_dir)
     filtros = Filtros(
         condiciones=[
@@ -271,3 +282,253 @@ def test_apertura_es_read_only(data_dev_dir, monkeypatch):
     assert all(m == dbf_lib.READ_ONLY for m in modos_observados), (
         f"Se abrió un DBF en modo distinto de READ_ONLY: {modos_observados}"
     )
+
+
+# ─── Robustez frente a registros corruptos / borrados ──────────────────────
+
+
+def _crear_dbfs_minimos(tmp_path):
+    """Crea un set mínimo de DBFs (cfactura, lfactura, clientes, material)
+    con un único cliente, un único artículo y dos facturas válidas.
+
+    Devuelve la ruta al directorio. El caller puede añadir registros
+    extra (factura con FECHA vacía, registro borrado, etc.).
+    """
+    cfactura_specs = (
+        'CODIGO C(10); SERIE C(4); NUMERO C(6); CLIENTE C(8); FECHA D;'
+        ' TOTPTS N(12,2); TOTCONIVA N(12,2);'
+        ' PTSBASE1 N(12,2); IVA1 N(5,2); RECEQUI1 N(5,2);'
+        ' PTSBASE2 N(12,2); IVA2 N(5,2); RECEQUI2 N(5,2);'
+        ' PTSBASE3 N(12,2); IVA3 N(5,2); RECEQUI3 N(5,2);'
+        ' RETIRPF N(5,2); CONTABIL L'
+    )
+    lfactura_specs = (
+        'CODIGO C(10); LINEA N(4,0); ARTICULO C(30); COMENTARIO C(80);'
+        ' CANTIDAD N(10,2); PRECIOV N(10,2); IVA N(5,2); TOTLINEA N(12,2)'
+    )
+    clientes_specs = 'CODIGO C(8); NOMBRE C(40); NIF C(12)'
+    material_specs = 'CLAVEMATE C(30); DESCRIPCIO C(50)'
+
+    def _crea(nombre: str, specs: str):
+        tabla = dbf_lib.Table(str(tmp_path / f'{nombre}.dbf'), specs, codepage='cp1252')
+        tabla.open(mode=dbf_lib.READ_WRITE)
+        return tabla
+
+    cfactura = _crea('cfactura', cfactura_specs)
+    cfactura.append({
+        'CODIGO': 'F000000001', 'SERIE': '2026', 'NUMERO': '000001',
+        'CLIENTE': 'CLI00001', 'FECHA': date(2026, 1, 10),
+        'TOTPTS': Decimal('100'), 'TOTCONIVA': Decimal('121'),
+        'PTSBASE1': Decimal('100'), 'IVA1': Decimal('21'), 'RECEQUI1': Decimal('0'),
+        'PTSBASE2': Decimal('0'), 'IVA2': Decimal('0'), 'RECEQUI2': Decimal('0'),
+        'PTSBASE3': Decimal('0'), 'IVA3': Decimal('0'), 'RECEQUI3': Decimal('0'),
+        'RETIRPF': Decimal('0'), 'CONTABIL': False,
+    })
+    cfactura.append({
+        'CODIGO': 'F000000002', 'SERIE': '2026', 'NUMERO': '000002',
+        'CLIENTE': 'CLI00001', 'FECHA': date(2026, 1, 11),
+        'TOTPTS': Decimal('50'), 'TOTCONIVA': Decimal('60.5'),
+        'PTSBASE1': Decimal('50'), 'IVA1': Decimal('21'), 'RECEQUI1': Decimal('0'),
+        'PTSBASE2': Decimal('0'), 'IVA2': Decimal('0'), 'RECEQUI2': Decimal('0'),
+        'PTSBASE3': Decimal('0'), 'IVA3': Decimal('0'), 'RECEQUI3': Decimal('0'),
+        'RETIRPF': Decimal('0'), 'CONTABIL': False,
+    })
+
+    lfactura = _crea('lfactura', lfactura_specs)
+    for codigo in ('F000000001', 'F000000002'):
+        lfactura.append({
+            'CODIGO': codigo, 'LINEA': 1, 'ARTICULO': 'ART01', 'COMENTARIO': '',
+            'CANTIDAD': Decimal('1'), 'PRECIOV': Decimal('50'),
+            'IVA': Decimal('21'), 'TOTLINEA': Decimal('50'),
+        })
+
+    clientes = _crea('clientes', clientes_specs)
+    clientes.append({'CODIGO': 'CLI00001', 'NOMBRE': 'Cliente Uno', 'NIF': '00000001A'})
+
+    material = _crea('material', material_specs)
+    material.append({'CLAVEMATE': 'ART01', 'DESCRIPCIO': 'Artículo de prueba'})
+
+    return tmp_path, cfactura, lfactura, clientes, material
+
+
+def test_factura_con_fecha_vacia_aparece_con_fecha_none(tmp_path, caplog):
+    """Una cabecera con FECHA=None se incluye en la preview con `fecha=None`
+    para que aparezca como ROJO y el contable pueda corregirla. Antes se
+    omitía silenciosamente y creaba huecos en la secuencia de números
+    (bug real: factura 2026/000195 en producción).
+
+    Añadimos también una fechada con NUMERO 000300 para que el rango cubra
+    la sin-fecha — sin un hueco real que rellenar, la nueva lógica de
+    `get_facturas` la descarta a propósito."""
+    import logging
+
+    ruta, cfactura, lfactura, clientes, material = _crear_dbfs_minimos(tmp_path)
+    try:
+        cfactura.append({
+            'CODIGO': '2026000195', 'SERIE': '2026', 'NUMERO': '000195',
+            'CLIENTE': 'CLI00001', 'FECHA': None,
+            'TOTPTS': Decimal('80.6'), 'TOTCONIVA': Decimal('97.53'),
+            'PTSBASE1': Decimal('80.6'), 'IVA1': Decimal('21'), 'RECEQUI1': Decimal('0'),
+            'PTSBASE2': Decimal('0'), 'IVA2': Decimal('0'), 'RECEQUI2': Decimal('0'),
+            'PTSBASE3': Decimal('0'), 'IVA3': Decimal('0'), 'RECEQUI3': Decimal('0'),
+            'RETIRPF': Decimal('0'), 'CONTABIL': True,
+        })
+        cfactura.append({
+            'CODIGO': 'F000000300', 'SERIE': '2026', 'NUMERO': '000300',
+            'CLIENTE': 'CLI00001', 'FECHA': date(2026, 1, 20),
+            'TOTPTS': Decimal('50'), 'TOTCONIVA': Decimal('60.5'),
+            'PTSBASE1': Decimal('50'), 'IVA1': Decimal('21'), 'RECEQUI1': Decimal('0'),
+            'PTSBASE2': Decimal('0'), 'IVA2': Decimal('0'), 'RECEQUI2': Decimal('0'),
+            'PTSBASE3': Decimal('0'), 'IVA3': Decimal('0'), 'RECEQUI3': Decimal('0'),
+            'RETIRPF': Decimal('0'), 'CONTABIL': False,
+        })
+    finally:
+        cfactura.close()
+        lfactura.close()
+        clientes.close()
+        material.close()
+
+    src = DbfSource(ruta)
+    with caplog.at_level(logging.WARNING, logger='app.sources.dbf_source'):
+        facturas = src.get_facturas(Filtros())
+
+    por_codigo = {f.codigo.strip(): f for f in facturas}
+    assert '2026000195' in por_codigo, "La factura sin FECHA debe aparecer en la preview"
+    incompleta = por_codigo['2026000195']
+    assert incompleta.fecha is None
+    assert incompleta.total_con_iva == Decimal('97.53')
+    assert any('2026000195' in r.getMessage() for r in caplog.records)
+
+
+def _crear_sin_fecha(tabla, codigo: str, numero: str, serie: str = '2026') -> None:
+    tabla.append({
+        'CODIGO': codigo, 'SERIE': serie, 'NUMERO': numero,
+        'CLIENTE': 'CLI00001', 'FECHA': None,
+        'TOTPTS': Decimal('10'), 'TOTCONIVA': Decimal('12.10'),
+        'PTSBASE1': Decimal('10'), 'IVA1': Decimal('21'), 'RECEQUI1': Decimal('0'),
+        'PTSBASE2': Decimal('0'), 'IVA2': Decimal('0'), 'RECEQUI2': Decimal('0'),
+        'PTSBASE3': Decimal('0'), 'IVA3': Decimal('0'), 'RECEQUI3': Decimal('0'),
+        'RETIRPF': Decimal('0'), 'CONTABIL': False,
+    })
+
+
+def test_factura_sin_fecha_aparece_si_numero_dentro_del_rango(tmp_path):
+    """Cuando la preview cubre del 000001 al 000002, una factura sin FECHA
+    con NUMERO 000002 (extremo) o 000001 (extremo) debe aparecer para que
+    el contable pueda corregirla — es exactamente el hueco que se quiere
+    rellenar."""
+    ruta, cfactura, lfactura, clientes, material = _crear_dbfs_minimos(tmp_path)
+    try:
+        _crear_sin_fecha(cfactura, 'SINFECHA01', '000002')
+    finally:
+        cfactura.close()
+        lfactura.close()
+        clientes.close()
+        material.close()
+
+    src = DbfSource(ruta)
+    filtro_enero = Filtros(
+        condiciones=[
+            Condicion(
+                'fecha',
+                OperadorCondicion.ENTRE,
+                ('2026-01-01', '2026-01-31'),
+            ),
+        ],
+    )
+    codigos = {f.codigo.strip() for f in src.get_facturas(filtro_enero)}
+    assert 'SINFECHA01' in codigos
+
+
+def test_factura_sin_fecha_se_excluye_si_numero_fuera_del_rango(tmp_path):
+    """Una factura sin FECHA con NUMERO muy lejano (p.ej. 000500 cuando la
+    preview cubre 000001-000002) NO debe aparecer — corresponde a otro mes
+    y mostrarla contaminaría la preview sin rellenar ningún hueco real."""
+    ruta, cfactura, lfactura, clientes, material = _crear_dbfs_minimos(tmp_path)
+    try:
+        _crear_sin_fecha(cfactura, 'SINFECHA01', '000500')
+    finally:
+        cfactura.close()
+        lfactura.close()
+        clientes.close()
+        material.close()
+
+    src = DbfSource(ruta)
+    filtro_enero = Filtros(
+        condiciones=[
+            Condicion(
+                'fecha',
+                OperadorCondicion.ENTRE,
+                ('2026-01-01', '2026-01-31'),
+            ),
+        ],
+    )
+    codigos = {f.codigo.strip() for f in src.get_facturas(filtro_enero)}
+    assert 'SINFECHA01' not in codigos
+
+
+def test_factura_sin_fecha_no_aparece_si_no_hay_fechadas(tmp_path):
+    """Si el filtro no devuelve ninguna factura con FECHA, no hay rango con
+    el que comparar — las sin-fecha quedan fuera para no contaminar una
+    preview vacía con cabeceras que el contable no estaba buscando."""
+    ruta, cfactura, lfactura, clientes, material = _crear_dbfs_minimos(tmp_path)
+    try:
+        _crear_sin_fecha(cfactura, 'SINFECHA01', '000001')
+    finally:
+        cfactura.close()
+        lfactura.close()
+        clientes.close()
+        material.close()
+
+    src = DbfSource(ruta)
+    filtro_lejano = Filtros(
+        condiciones=[
+            Condicion(
+                'fecha',
+                OperadorCondicion.ENTRE,
+                ('1900-01-01', '1900-01-02'),
+            ),
+        ],
+    )
+    codigos = {f.codigo.strip() for f in src.get_facturas(filtro_lejano)}
+    assert codigos == set()
+
+
+def test_registros_borrados_se_ignoran(tmp_path):
+    """Los registros marcados como borrados (`*` de FoxPro, sin PACK) no
+    deben aparecer en el preview ni en ninguna lista — son fantasmas que
+    GESDAI mantiene en el fichero hasta el próximo PACK."""
+    ruta, cfactura, lfactura, clientes, material = _crear_dbfs_minimos(tmp_path)
+    try:
+        clientes.append({'CODIGO': 'CLI99998', 'NOMBRE': 'Borrado', 'NIF': ''})
+        material.append({'CLAVEMATE': 'ARTBORR', 'DESCRIPCIO': 'Artículo borrado'})
+        cfactura.append({
+            'CODIGO': 'FBORRADA01', 'SERIE': '2026', 'NUMERO': '000099',
+            'CLIENTE': 'CLI00001', 'FECHA': date(2026, 1, 5),
+            'TOTPTS': Decimal('10'), 'TOTCONIVA': Decimal('12.1'),
+            'PTSBASE1': Decimal('10'), 'IVA1': Decimal('21'), 'RECEQUI1': Decimal('0'),
+            'PTSBASE2': Decimal('0'), 'IVA2': Decimal('0'), 'RECEQUI2': Decimal('0'),
+            'PTSBASE3': Decimal('0'), 'IVA3': Decimal('0'), 'RECEQUI3': Decimal('0'),
+            'RETIRPF': Decimal('0'), 'CONTABIL': False,
+        })
+        # Marcar como borrados los últimos registros añadidos.
+        for tabla in (cfactura, clientes, material):
+            dbf_lib.delete(tabla[-1])
+    finally:
+        cfactura.close()
+        lfactura.close()
+        clientes.close()
+        material.close()
+
+    src = DbfSource(ruta)
+    codigos_factura = {f.codigo.strip() for f in src.get_facturas(Filtros())}
+    assert 'FBORRADA01' not in codigos_factura
+
+    codigos_cliente = {c.codigo.strip() for c in src.get_clientes()}
+    assert 'CLI99998' not in codigos_cliente
+
+    claves_articulo = {a.clave.strip() for a in src.get_articulos()}
+    assert 'ARTBORR' not in claves_articulo
+
+    with pytest.raises(KeyError):
+        src.get_cliente('CLI99998')

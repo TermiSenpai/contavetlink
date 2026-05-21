@@ -68,6 +68,12 @@ def _evaluar_condicion(cond: Condicion, factura: Factura) -> bool:
         return True
 
     actual = _extraer_campo(factura, cond.campo)
+    # Una factura sin FECHA siempre pasa el filtro de fecha — no podemos
+    # ubicarla en un rango, pero el contable debe verla en preview (ROJO)
+    # para corregirla en GESDAI. Sin esto, las facturas mal introducidas
+    # desaparecen silenciosamente y crean huecos en la secuencia.
+    if cond.campo == 'fecha' and actual is None:
+        return True
     return _comparar(actual, cond.operador, cond.valor)
 
 

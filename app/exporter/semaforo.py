@@ -87,6 +87,17 @@ def clasificar_factura(
         advertencia_contabil=bool(factura.contabil),
     )
 
+    # 0. FECHA vacía en GESDAI → ROJO. La factura aparece en la preview
+    #    para no dejar huecos en la secuencia, pero bloquea exportación
+    #    hasta que el contable corrija el campo en GESDAI. Comprobar antes
+    #    que el builder porque éste llamaría a `.strftime` sobre None.
+    if factura.fecha is None:
+        mensaje = "FECHA vacía en GESDAI — corrige la cabecera antes de exportar."
+        entrada.color = ColorSemaforo.ROJO
+        entrada.mensaje = mensaje
+        entrada.errores.append(mensaje)
+        return entrada
+
     # 1. ¿Ya exportada? → GRIS (se excluye del DAT automáticamente)
     try:
         builder._validar_no_exportada(factura)

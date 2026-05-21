@@ -117,7 +117,7 @@
                         {% if f.advertencia_contabil %}⚠️{% endif %}
                     </td>
                     <td class="mono">{{ f.serie }}{{ f.numero }}</td>
-                    <td>{{ f.fecha }}</td>
+                    <td>{{ f.fecha or 'Sin fecha' }}</td>
                     <td>{{ f.cliente_codigo }}</td>
                     <td>
                         <input type="text"

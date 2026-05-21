@@ -458,7 +458,7 @@ def _entrada_a_dict(entrada: EntradaPreview) -> dict[str, Any]:
         subcuenta = entrada.construccion.cabecera.cuenta.strip()
     return {
         'codigo': entrada.factura.codigo,
-        'fecha': entrada.factura.fecha.isoformat(),
+        'fecha': entrada.factura.fecha.isoformat() if entrada.factura.fecha else '',
         'cliente_codigo': entrada.factura.cliente_codigo,
         'serie': entrada.factura.serie.strip(),
         'numero': entrada.factura.numero.strip(),
