@@ -15,9 +15,9 @@ jobs:
     env:
       FLASK_ENV: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -70,7 +70,7 @@ jobs:
             "$EXE_PATH.sha256"
 
       - name: Subir .exe como artifact (diagnóstico)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: gesdai-exporter-${{ github.ref_name }}
           path: |
