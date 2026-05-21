@@ -153,7 +153,7 @@ def main() -> int:
     parser.add_argument(
         '--data',
         type=Path,
-        default=Path(__file__).resolve().parent.parent / 'DATA_DEV',
+        default=Path(__file__).resolve().parents[2] / 'tests' / 'data' / 'DATA_DEV',
     )
     args = parser.parse_args()
 

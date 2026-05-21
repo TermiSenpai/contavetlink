@@ -65,7 +65,7 @@ NUEVAS = [
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--data', type=Path, default=Path(__file__).resolve().parent.parent / 'DATA_DEV')
+    parser.add_argument('--data', type=Path, default=Path(__file__).resolve().parents[2] / 'tests' / 'data' / 'DATA_DEV')
     args = parser.parse_args()
 
     cfactura_path = args.data / 'cfactura.dbf'
