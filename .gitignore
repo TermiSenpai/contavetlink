@@ -59,6 +59,8 @@ build/
 dist/
 *.manifest
 *.spec.bak
+# icon.ico se regenera desde icon.svg en cada build (scripts/build_icon.py)
+app/static/icon.ico
 
 # --- IDE ---
 .vscode/

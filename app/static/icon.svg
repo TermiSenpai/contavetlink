@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ContaVetLink">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F766E"/>
+      <stop offset="55%" stop-color="#0B5E58"/>
+      <stop offset="100%" stop-color="#064E3B"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.2" r="0.9">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- App tile -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+
+  <!-- Veterinary paw stamp — centered, ~70% of tile -->
+  <g transform="translate(256 256)">
+    <circle r="179" fill="#F43F5E" opacity="0.12"/>
+    <circle r="179" fill="none" stroke="#E11D48" stroke-width="8" stroke-dasharray="12 16"/>
+    <g fill="#E11D48" transform="scale(4.07)">
+      <!-- main pad -->
+      <path d="M -14 12 C -22 12 -26 4 -22 -4 C -18 -12 -8 -16 0 -12 C 8 -16 18 -12 22 -4 C 26 4 22 12 14 12 C 8 12 4 18 0 18 C -4 18 -8 12 -14 12 Z"/>
+      <!-- toes -->
+      <ellipse cx="-18" cy="-16" rx="5.2" ry="6.6"/>
+      <ellipse cx="-6"  cy="-24" rx="5.2" ry="6.6"/>
+      <ellipse cx="6"   cy="-24" rx="5.2" ry="6.6"/>
+      <ellipse cx="18"  cy="-16" rx="5.2" ry="6.6"/>
+    </g>
+  </g>
+</svg>

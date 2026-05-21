@@ -21,7 +21,12 @@ from app.env import load_environment
 
 
 def main() -> int:
-    project_root = Path(__file__).resolve().parent
+    # En modo frozen (PyInstaller onedir), __file__ apunta a _internal/main.py,
+    # pero los .env viven junto al .exe — usar sys.executable.parent.
+    if getattr(sys, 'frozen', False):
+        project_root = Path(sys.executable).resolve().parent
+    else:
+        project_root = Path(__file__).resolve().parent
     load_environment(project_root)
 
     # Imports diferidos: app.config resuelve env vars en el momento de `get_config()`,
