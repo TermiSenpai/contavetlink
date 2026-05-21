@@ -14,7 +14,6 @@ import logging
 from flask import (
     Blueprint,
     current_app,
-    flash,
     jsonify,
     render_template,
     request,
@@ -42,39 +41,16 @@ bp = Blueprint('export', __name__, url_prefix='/export')
 def index():
     """Landing del panel de exportación.
 
-    Pre-carga la preview del mes en curso para que el operador vea de
-    entrada qué hay por exportar, sin tener que tocar filtros. Si hay un
-    error de configuración (GESDAI no configurado, faltan claves), se
-    flashea y se muestra el panel con la tabla vacía.
-
-    IMPORTANTE: hace `conn.commit()` después del preview para persistir los
-    mappings pendientes que el resolver descubre como side-effect al
-    clasificar artículos. Sin este commit, la conexión de Flask se cierra
-    al terminar la request y SQLite hace rollback automático — el operador
-    vería un preview con "DEFAULT" amarillos pero al ir a /mappings/articulos
-    no encontraría nada nuevo.
+    No pre-ejecuta la preview: rinde el formulario con el filtro del mes
+    actual ya rellenado, y el operador pulsa "Vista previa" para cargar
+    las facturas. Evita golpear GESDAI en cada navegación a la página
+    (especialmente costoso si el DBF está bloqueado por otros usuarios) y
+    permite al operador ajustar filtros antes de la primera lectura.
     """
-    conn = get_db()
-    preview_dict = None
     filtros_iniciales = filtro_mes_actual()
-
-    try:
-        config = leer_configuracion(conn)
-        source = get_configured_source(conn)
-        preview = ejecutar_preview(conn, source, filtros_iniciales, config)
-        conn.commit()
-        preview_dict = preview_a_dict(preview)
-    except FuenteNoConfiguradaError as e:
-        flash(str(e), 'error')
-    except ConfiguracionIncompletaError as e:
-        flash(str(e), 'warning')
-    except Exception as e:
-        log.exception("Error generando preview inicial")
-        flash(f"Error leyendo GESDAI: {e}", 'error')
-
     return render_template(
         'export.html',
-        preview=preview_dict,
+        preview=None,
         filtros_iniciales={
             'operador': 'AND',
             'condiciones': [
@@ -164,58 +140,50 @@ def generar():
     )
 
 
-@bp.get('/factura/<codigo>')
-def factura_detalle(codigo: str):
-    """Devuelve el detalle completo de una factura para el modal."""
-    conn = get_db()
-    try:
-        config = leer_configuracion(conn)
-        source = get_configured_source(conn)
-    except (ConfiguracionIncompletaError, FuenteNoConfiguradaError) as e:
-        return jsonify(ok=False, error=str(e)), 400
-
+def _construir_detalle_factura(
+    factura,
+    conn,
+    source,
+    resolver,
+    cliente_cache: dict | None = None,
+) -> dict:
+    """Construye el dict de detalle de una factura (mismo shape que devuelve
+    GET /export/factura/<codigo>). Si se pasa `cliente_cache`, se reutiliza la
+    resolución del cliente y su NIF entre facturas de la misma respuesta para
+    evitar repetir lecturas del intermediario y de la fuente DBF.
+    """
     from app.mapping.resolver import (
         ClienteSinSubcuentaError,
-        Resolver,
     )
     from app.mapping.store import get_cliente_mapping
 
-    # Buscar la factura en el rango completo (sin filtros restrictivos)
-    facturas = source.get_facturas(filtros_desde_json(None))
-    factura = None
-    for f in facturas:
-        if f.codigo == codigo:
-            factura = f
-            break
-    if factura is None:
-        return jsonify(ok=False, error=f'Factura {codigo!r} no encontrada'), 404
+    codigo_cli = factura.cliente_codigo
+    if cliente_cache is not None and codigo_cli in cliente_cache:
+        cached_info, subcuenta = cliente_cache[codigo_cli]
+        cliente_info = dict(cached_info)
+    else:
+        subcuenta = ''
+        try:
+            res_cli = resolver.resolver_cliente(codigo_cli)
+            subcuenta = res_cli.subcuenta_a3
+            cliente_info = {
+                'nombre': res_cli.nombre,
+                'subcuenta_a3': res_cli.subcuenta_a3,
+            }
+        except ClienteSinSubcuentaError:
+            fila = get_cliente_mapping(conn, codigo_cli)
+            cliente_info = {
+                'nombre': fila['nombre'] if fila else codigo_cli,
+                'subcuenta_a3': '',
+            }
+        try:
+            cliente_obj = source.get_cliente(codigo_cli)
+            cliente_info['nif'] = cliente_obj.nif or ''
+        except Exception:
+            cliente_info['nif'] = ''
+        if cliente_cache is not None:
+            cliente_cache[codigo_cli] = (dict(cliente_info), subcuenta)
 
-    # Resolver cliente
-    resolver = Resolver(conn, config.cuenta_ventas_def)
-    cliente_info = {}
-    subcuenta = ''
-    try:
-        res_cli = resolver.resolver_cliente(factura.cliente_codigo)
-        subcuenta = res_cli.subcuenta_a3
-        cliente_info = {
-            'nombre': res_cli.nombre,
-            'subcuenta_a3': res_cli.subcuenta_a3,
-        }
-    except ClienteSinSubcuentaError:
-        fila = get_cliente_mapping(conn, factura.cliente_codigo)
-        cliente_info = {
-            'nombre': fila['nombre'] if fila else factura.cliente_codigo,
-            'subcuenta_a3': '',
-        }
-
-    # Resolver NIF del cliente
-    try:
-        cliente_obj = source.get_cliente(factura.cliente_codigo)
-        cliente_info['nif'] = cliente_obj.nif or ''
-    except (KeyError, Exception):
-        cliente_info['nif'] = ''
-
-    # Resolver cada línea
     lineas_out = []
     for linea in factura.lineas:
         res_art = resolver.resolver_articulo(linea.articulo, linea.comentario)
@@ -230,15 +198,12 @@ def factura_detalle(codigo: str):
             'resolucion_tipo': res_art.tipo.value,
         })
 
-    conn.commit()
-
-    return jsonify(
-        ok=True,
-        factura={
+    return {
+        'factura': {
             'codigo': factura.codigo,
             'serie': factura.serie.strip(),
             'numero': factura.numero.strip(),
-            'fecha': factura.fecha.isoformat(),
+            'fecha': factura.fecha.isoformat() if factura.fecha else '',
             'cliente_codigo': factura.cliente_codigo,
             'total_base': str(factura.total_base),
             'total_con_iva': str(factura.total_con_iva),
@@ -250,10 +215,90 @@ def factura_detalle(codigo: str):
             'ptsbase3': str(factura.ptsbase3),
             'iva3': str(factura.iva3),
         },
-        cliente=cliente_info,
-        subcuenta=subcuenta,
-        lineas=lineas_out,
-    )
+        'cliente': cliente_info,
+        'subcuenta': subcuenta,
+        'lineas': lineas_out,
+    }
+
+
+@bp.get('/factura/<codigo>')
+def factura_detalle(codigo: str):
+    """Devuelve el detalle completo de una factura para el modal.
+
+    Usado como fallback cuando el cache de precarga del front (poblado por
+    `/export/preview/detalles`) no contiene la factura — por ejemplo si la
+    precarga falló o si el usuario abre el modal antes de que se haya
+    disparado la primera preview.
+    """
+    conn = get_db()
+    try:
+        config = leer_configuracion(conn)
+        source = get_configured_source(conn)
+    except (ConfiguracionIncompletaError, FuenteNoConfiguradaError) as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+    from app.mapping.resolver import Resolver
+
+    # Buscar la factura en el rango completo (sin filtros restrictivos)
+    facturas = source.get_facturas(filtros_desde_json(None))
+    factura = next((f for f in facturas if f.codigo == codigo), None)
+    if factura is None:
+        return jsonify(ok=False, error=f'Factura {codigo!r} no encontrada'), 404
+
+    resolver = Resolver(conn, config.cuenta_ventas_def)
+    detalle = _construir_detalle_factura(factura, conn, source, resolver)
+    conn.commit()
+
+    return jsonify(ok=True, **detalle)
+
+
+@bp.post('/preview/detalles')
+def preview_detalles():
+    """Devuelve detalles completos de todas las facturas que cumplen los
+    filtros, en una sola pasada. Pensado para que el front lo dispare en
+    segundo plano tras `/export/preview` y abra el modal de cada fila sin
+    esperar al backend.
+
+    Comparte un cache local de clientes entre todas las facturas para no
+    repetir `get_cliente_mapping` ni `source.get_cliente` por cada factura
+    del mismo cliente.
+    """
+    conn = get_db()
+    data = request.get_json(silent=True) or {}
+    try:
+        filtros = filtros_desde_json(data.get('filtros'))
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+    try:
+        config = leer_configuracion(conn)
+    except ConfiguracionIncompletaError as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+    try:
+        source = get_configured_source(conn)
+    except FuenteNoConfiguradaError as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+    from app.mapping.resolver import Resolver
+
+    resolver = Resolver(conn, config.cuenta_ventas_def)
+    cliente_cache: dict = {}
+
+    try:
+        facturas = source.get_facturas(filtros)
+        detalles = {
+            f.codigo: _construir_detalle_factura(
+                f, conn, source, resolver, cliente_cache=cliente_cache,
+            )
+            for f in facturas
+        }
+    except Exception as e:
+        log.exception("Error precargando detalles de facturas")
+        return jsonify(ok=False, error=f"Error inesperado: {e}"), 500
+
+    conn.commit()
+    return jsonify(ok=True, detalles=detalles)
 
 
 @bp.post('/preview/excel')

@@ -594,6 +594,89 @@ def test_export_preview_excel(client_export_listo):
     assert len(resp.data) > 0
 
 
+def test_post_preview_detalles_devuelve_dict_por_codigo(client_export_listo):
+    """El endpoint de precarga devuelve un dict { codigo: detalle } con la
+    misma forma que GET /export/factura/<codigo> para cada factura del
+    rango filtrado — el front lo usa como cache para abrir el modal sin
+    viajar al backend."""
+    preview = client_export_listo.post('/export/preview', json={'filtros': {}}).get_json()
+    codigos = [f['codigo'] for f in preview['facturas']]
+    assert len(codigos) > 0
+
+    resp = client_export_listo.post('/export/preview/detalles', json={'filtros': {}})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['ok'] is True
+    assert set(body['detalles'].keys()) == set(codigos)
+
+    sample = body['detalles'][codigos[0]]
+    assert set(sample.keys()) == {'factura', 'cliente', 'subcuenta', 'lineas'}
+    assert sample['factura']['codigo'] == codigos[0]
+    assert isinstance(sample['lineas'], list)
+
+
+def test_post_preview_detalles_coincide_con_factura_individual(client_export_listo):
+    """Regresión: el dict del cache debe ser intercambiable con la respuesta
+    de /export/factura/<codigo> (mismas claves, mismos valores). Si difieren,
+    el modal renderizaría datos distintos según venga de cache o de fetch."""
+    preview = client_export_listo.post('/export/preview', json={'filtros': {}}).get_json()
+    codigo = preview['facturas'][0]['codigo']
+
+    batch = client_export_listo.post(
+        '/export/preview/detalles', json={'filtros': {}},
+    ).get_json()
+    individual = client_export_listo.get(
+        f'/export/factura/{codigo}',
+    ).get_json()
+
+    desde_cache = batch['detalles'][codigo]
+    # `individual` añade 'ok': True, pero el resto debe coincidir 1-a-1
+    assert desde_cache['factura'] == individual['factura']
+    assert desde_cache['cliente'] == individual['cliente']
+    assert desde_cache['subcuenta'] == individual['subcuenta']
+    assert desde_cache['lineas'] == individual['lineas']
+
+
+def test_post_preview_detalles_respeta_filtros(client_export_listo):
+    """Solo se precargan las facturas que cumplen los filtros activos."""
+    preview = client_export_listo.post('/export/preview', json={
+        'filtros': {
+            'operador': 'AND',
+            'condiciones': [
+                {'campo': 'fecha', 'operador': 'entre',
+                 'valor': ['2024-07-01', '2024-07-31']},
+            ],
+        },
+    }).get_json()
+    esperados = {f['codigo'] for f in preview['facturas']}
+
+    resp = client_export_listo.post('/export/preview/detalles', json={
+        'filtros': {
+            'operador': 'AND',
+            'condiciones': [
+                {'campo': 'fecha', 'operador': 'entre',
+                 'valor': ['2024-07-01', '2024-07-31']},
+            ],
+        },
+    })
+    assert resp.status_code == 200
+    assert set(resp.get_json()['detalles'].keys()) == esperados
+
+
+def test_post_preview_detalles_sin_config_400(client):
+    resp = client.post('/export/preview/detalles', json={'filtros': {}})
+    assert resp.status_code == 400
+    assert resp.get_json()['ok'] is False
+
+
+def test_post_preview_detalles_filtro_invalido_400(client_export_listo):
+    resp = client_export_listo.post('/export/preview/detalles', json={
+        'filtros': {'operador': 'XOR', 'condiciones': []},
+    })
+    assert resp.status_code == 400
+    assert resp.get_json()['ok'] is False
+
+
 # ─── /historial/ ───────────────────────────────────────────────────────────
 
 

@@ -279,6 +279,13 @@
                 try {
                     const body = await postJSON('/export/preview', { filtros: estadoFiltros });
                     actualizarTablaPreview(body);
+                    // Precarga en segundo plano: el modal de cada fila abrirá
+                    // sin esperar al backend si el prefetch ya ha terminado.
+                    if ((body.facturas || []).length > 0) {
+                        precargarDetalles(estadoFiltros);
+                    } else {
+                        limpiarCacheDetalles();
+                    }
                 } catch (e) {
                     alert('Error al previsualizar: ' + e.message);
                 } finally {
@@ -397,6 +404,36 @@
     // de las facturas que usan ese artículo reflejen la nueva cuenta.
     let modalDirty = false;
 
+    // Cache de detalles de factura precargados en segundo plano tras cada
+    // preview. Permite abrir el modal sin viaje al backend. El contador `gen`
+    // descarta respuestas obsoletas si el usuario re-filtra mientras un
+    // prefetch anterior sigue en vuelo.
+    let detallesCache = {};
+    let detallesCacheGen = 0;
+    let detallesCargandoPromise = null;
+
+    function precargarDetalles(filtros) {
+        const gen = ++detallesCacheGen;
+        detallesCache = {};
+        detallesCargandoPromise = postJSON('/export/preview/detalles', { filtros })
+            .then((body) => {
+                if (gen !== detallesCacheGen) return;
+                detallesCache = body.detalles || {};
+            })
+            .catch((err) => {
+                if (gen !== detallesCacheGen) return;
+                // No es bloqueante: el modal hará fallback a /export/factura/<id>.
+                console.warn('No se pudo precargar detalles de facturas:', err);
+            });
+        return detallesCargandoPromise;
+    }
+
+    function limpiarCacheDetalles() {
+        detallesCacheGen++;
+        detallesCache = {};
+        detallesCargandoPromise = null;
+    }
+
     function inicializarModalFactura() {
         const modal = document.getElementById('modal-factura');
         if (!modal) return;
@@ -450,12 +487,23 @@
         modal.hidden = false;
 
         try {
-            const res = await fetch('/export/factura/' + encodeURIComponent(codigo));
-            const body = await res.json();
-            if (!res.ok || body.ok === false) {
-                set('md-title', 'Error');
-                set('md-subtitle', body.error || 'No se pudo cargar la factura');
-                return;
+            // 1) Hit directo en el cache de prefetch.
+            // 2) Si hay prefetch en vuelo, esperarlo y reintentar el cache.
+            // 3) Fallback: fetch individual contra /export/factura/<codigo>.
+            let body = detallesCache[codigo];
+            if (!body && detallesCargandoPromise) {
+                await detallesCargandoPromise;
+                body = detallesCache[codigo];
+            }
+            if (!body) {
+                const res = await fetch('/export/factura/' + encodeURIComponent(codigo));
+                const fetched = await res.json();
+                if (!res.ok || fetched.ok === false) {
+                    set('md-title', 'Error');
+                    set('md-subtitle', fetched.error || 'No se pudo cargar la factura');
+                    return;
+                }
+                body = fetched;
             }
 
             const f = body.factura;
