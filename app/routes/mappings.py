@@ -34,8 +34,14 @@ from flask import (
 from app.db import get_db
 from app.io import csv_handler, excel_handler
 from app.mapping.store import (
+    CodigoDuplicadoError,
     CuentaDuplicadaError,
+    OrigenInvalidoError,
     SubcuentaInvalidaError,
+    crear_articulo_manual,
+    crear_cliente_manual,
+    eliminar_articulo_manual,
+    eliminar_cliente_manual,
     list_articulos_mappings,
     list_clientes_mappings,
     marcar_articulo_revisado,
@@ -141,6 +147,53 @@ def clientes_marcar_revisado(codigo: str):
         return jsonify(ok=False, error=f"Cliente no encontrado: {codigo}"), 404
     conn.commit()
     return jsonify(ok=True, codigo=codigo, revisado=revisado)
+
+
+@bp.post('/clientes/crear')
+def clientes_crear():
+    """Crea un cliente manual (no existe en GESDAI). JSON.
+
+    Espera `{codigo, nombre, subcuenta_a3, nif?, notas?}`. El operador
+    decide el código (prefijo libre, p.ej. `MAN001`) siempre que no
+    colisione con uno ya existente — sea de GESDAI o manual.
+    """
+    data = request.get_json(silent=True) or request.form
+    conn = get_db()
+    try:
+        crear_cliente_manual(
+            conn,
+            codigo=(data.get('codigo') or '').strip(),
+            nombre=(data.get('nombre') or '').strip(),
+            subcuenta_a3=(data.get('subcuenta_a3') or '').strip(),
+            nif=(data.get('nif') or '').strip() or None,
+            notas=(data.get('notas') or '').strip() or None,
+        )
+    except SubcuentaInvalidaError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except CodigoDuplicadoError as e:
+        return jsonify(ok=False, error=str(e)), 409
+    except CuentaDuplicadaError as e:
+        return jsonify(ok=False, error=str(e)), 409
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    conn.commit()
+    revisados, total = progreso_clientes(conn)
+    return jsonify(ok=True, progreso={'revisados': revisados, 'total': total})
+
+
+@bp.delete('/clientes/<codigo>')
+def clientes_delete(codigo: str):
+    """Borra un cliente manual. 409 si la fila proviene de GESDAI."""
+    conn = get_db()
+    try:
+        eliminar_cliente_manual(conn, codigo)
+    except KeyError:
+        return jsonify(ok=False, error=f"Cliente no encontrado: {codigo}"), 404
+    except OrigenInvalidoError as e:
+        return jsonify(ok=False, error=str(e)), 409
+    conn.commit()
+    revisados, total = progreso_clientes(conn)
+    return jsonify(ok=True, progreso={'revisados': revisados, 'total': total})
 
 
 @bp.post('/clientes/import')
@@ -284,6 +337,52 @@ def articulos_marcar_revisado(clave: str):
         return jsonify(ok=False, error=f"Artículo no encontrado: {clave}"), 404
     conn.commit()
     return jsonify(ok=True, clave=clave, revisado=revisado)
+
+
+@bp.post('/articulos/crear')
+def articulos_crear():
+    """Crea un artículo manual (no existe en GESDAI). JSON.
+
+    Espera `{clave, descripcion, cuenta_a3, notas?}`. Caso típico: texto
+    libre recurrente en facturas que el operador quiere mapear a una
+    cuenta concreta sin depender de keywords.
+    """
+    data = request.get_json(silent=True) or request.form
+    conn = get_db()
+    try:
+        crear_articulo_manual(
+            conn,
+            clave=(data.get('clave') or '').strip(),
+            descripcion=(data.get('descripcion') or '').strip(),
+            cuenta_a3=(data.get('cuenta_a3') or '').strip(),
+            notas=(data.get('notas') or '').strip() or None,
+        )
+    except SubcuentaInvalidaError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except CodigoDuplicadoError as e:
+        return jsonify(ok=False, error=str(e)), 409
+    except CuentaDuplicadaError as e:
+        return jsonify(ok=False, error=str(e)), 409
+    except ValueError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    conn.commit()
+    revisados, total = progreso_articulos(conn)
+    return jsonify(ok=True, progreso={'revisados': revisados, 'total': total})
+
+
+@bp.delete('/articulos/<clave>')
+def articulos_delete(clave: str):
+    """Borra un artículo manual. 409 si la fila proviene de GESDAI."""
+    conn = get_db()
+    try:
+        eliminar_articulo_manual(conn, clave)
+    except KeyError:
+        return jsonify(ok=False, error=f"Artículo no encontrado: {clave}"), 404
+    except OrigenInvalidoError as e:
+        return jsonify(ok=False, error=str(e)), 409
+    conn.commit()
+    revisados, total = progreso_articulos(conn)
+    return jsonify(ok=True, progreso={'revisados': revisados, 'total': total})
 
 
 @bp.post('/articulos/import')

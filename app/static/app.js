@@ -1111,6 +1111,135 @@
         cuentasCatalogPromise = null;
     }
 
+    // ─── Alta manual de articulos / clientes ────────────────────────────────
+    //
+    // Modal con formulario simple. El submit POSTea a /mappings/{articulos,
+    // clientes}/crear y, si todo va bien, recarga la pagina para que la
+    // nueva fila aparezca en la tabla con su columna `origen=manual` y el
+    // boton de borrado. No reconstruimos la fila a mano porque las plantillas
+    // ya tienen toda la logica (badges, autosave wiring, etc.) y un reload
+    // garantiza paridad sin duplicar markup en JS.
+
+    function inicializarAltaManual() {
+        wireModalCrear({
+            kind: 'articulo',
+            openSel: '[data-action="open-crear-articulo"]',
+            closeSel: '[data-action="close-crear-articulo"]',
+            modalSel: '#modal-crear-articulo',
+            formSel: '#form-crear-articulo',
+            errorSel: '#form-crear-articulo-error',
+            url: '/mappings/articulos/crear',
+            payload: (fd) => ({
+                clave: fd.get('clave'),
+                descripcion: fd.get('descripcion'),
+                cuenta_a3: fd.get('cuenta_a3'),
+                notas: fd.get('notas') || null,
+            }),
+        });
+
+        wireModalCrear({
+            kind: 'cliente',
+            openSel: '[data-action="open-crear-cliente"]',
+            closeSel: '[data-action="close-crear-cliente"]',
+            modalSel: '#modal-crear-cliente',
+            formSel: '#form-crear-cliente',
+            errorSel: '#form-crear-cliente-error',
+            url: '/mappings/clientes/crear',
+            payload: (fd) => ({
+                codigo: fd.get('codigo'),
+                nombre: fd.get('nombre'),
+                subcuenta_a3: fd.get('subcuenta_a3'),
+                nif: fd.get('nif') || null,
+                notas: fd.get('notas') || null,
+            }),
+        });
+
+        wireDeleteManual({
+            actionAttr: 'delete-articulo-manual',
+            urlFor: (id) => `/mappings/articulos/${encodeURIComponent(id)}`,
+            idAttr: 'clave',
+            label: 'articulo',
+        });
+
+        wireDeleteManual({
+            actionAttr: 'delete-cliente-manual',
+            urlFor: (id) => `/mappings/clientes/${encodeURIComponent(id)}`,
+            idAttr: 'codigo',
+            label: 'cliente',
+        });
+    }
+
+    function wireModalCrear(cfg) {
+        const modal = $(cfg.modalSel);
+        const form = $(cfg.formSel);
+        if (!modal || !form) return;
+        const errorEl = $(cfg.errorSel);
+
+        const abrir = () => {
+            form.reset();
+            if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+            modal.hidden = false;
+            const first = form.querySelector('input');
+            if (first) first.focus();
+        };
+        const cerrar = () => { modal.hidden = true; };
+
+        $$(cfg.openSel).forEach((btn) => btn.addEventListener('click', abrir));
+        $$(cfg.closeSel).forEach((btn) => btn.addEventListener('click', cerrar));
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) cerrar();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.hidden) cerrar();
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; }
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+            try {
+                const fd = new FormData(form);
+                await postJSON(cfg.url, cfg.payload(fd));
+                window.location.reload();
+            } catch (err) {
+                if (errorEl) {
+                    errorEl.textContent = err.message || 'Error desconocido';
+                    errorEl.hidden = false;
+                } else {
+                    alert('Error: ' + (err.message || 'desconocido'));
+                }
+                if (submitBtn) submitBtn.disabled = false;
+            }
+        });
+    }
+
+    function wireDeleteManual(cfg) {
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest(`[data-action="${cfg.actionAttr}"]`);
+            if (!btn) return;
+            const tr = btn.closest('tr');
+            if (!tr) return;
+            const id = tr.dataset[cfg.idAttr];
+            if (!id) return;
+            const desc = (tr.children[1] && tr.children[1].textContent.trim()) || id;
+            if (!confirm(`¿Eliminar el ${cfg.label} manual "${id}" (${desc})?`)) return;
+            btn.disabled = true;
+            try {
+                const res = await fetch(cfg.urlFor(id), { method: 'DELETE' });
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok || body.ok === false) {
+                    throw new Error(body.error || `HTTP ${res.status}`);
+                }
+                tr.remove();
+                if (body.progreso) actualizarProgreso(body.progreso);
+            } catch (err) {
+                alert('Error al eliminar: ' + (err.message || 'desconocido'));
+                btn.disabled = false;
+            }
+        });
+    }
+
     // ─── Bootstrap ──────────────────────────────────────────────────────────
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1121,5 +1250,6 @@
         inicializarBuscador();
         inicializarVerificarDbf();
         inicializarProbador();
+        inicializarAltaManual();
     });
 })();

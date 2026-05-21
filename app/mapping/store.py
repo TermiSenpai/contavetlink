@@ -50,6 +50,18 @@ class CuentaDuplicadaError(ValueError):
     """
 
 
+class CodigoDuplicadoError(ValueError):
+    """Ya existe una fila con el mismo código/clave en la tabla."""
+
+
+class OrigenInvalidoError(ValueError):
+    """Operación sólo permitida sobre filas con `origen='manual'`."""
+
+
+ORIGEN_GESDAI = 'gesdai'
+ORIGEN_MANUAL = 'manual'
+
+
 def validar_subcuenta_cliente(subcuenta: str) -> str:
     """Devuelve la subcuenta si cumple `^430\\d{3}$`. Lanza si no."""
     if not isinstance(subcuenta, str) or not RE_SUBCUENTA_CLIENTE.match(subcuenta):
@@ -399,3 +411,169 @@ def upsert_articulo_desde_modelo(conn: sqlite3.Connection, articulo: Articulo) -
         clave=articulo.clave,
         descripcion=articulo.descripcion,
     )
+
+
+# ─── Alta manual (ítems que no existen en GESDAI) ──────────────────────────
+#
+# Estas funciones permiten al operador crear filas "fantasma" en el
+# intermediario sin sincronizar nada desde GESDAI. Casos típicos:
+#   - artículos que aparecen en facturas como texto libre y se repiten
+#     suficiente como para querer asignarles una cuenta nominal
+#   - clientes que existen en a3ASESOR pero no como ficha en GESDAI; el
+#     match con facturas se hace por NIF (ver `find_cliente_manual_por_nif`).
+#
+# Reglas:
+#   - `origen='manual'`, `revisado=1` desde el primer momento (el operador
+#     ya las creó conscientemente, no son pendientes de revisión).
+#   - Sólo las filas con `origen='manual'` pueden borrarse — las de
+#     GESDAI viven mientras GESDAI las tenga.
+#   - El código/clave no puede colisionar con uno ya existente (sea de
+#     GESDAI o manual previo).
+
+
+def crear_articulo_manual(
+    conn: sqlite3.Connection,
+    clave: str,
+    descripcion: str,
+    cuenta_a3: str,
+    notas: str | None = None,
+) -> None:
+    """Inserta un artículo manual ya revisado. Lanza si la clave existe."""
+    clave = (clave or '').strip()
+    descripcion = (descripcion or '').strip()
+    if not clave:
+        raise ValueError("La clave del artículo manual no puede estar vacía")
+    if not descripcion:
+        raise ValueError("La descripción del artículo manual no puede estar vacía")
+    validar_subcuenta_ingreso(cuenta_a3)
+
+    if get_articulo_mapping(conn, clave) is not None:
+        raise CodigoDuplicadoError(
+            f"Ya existe un artículo con clave {clave!r}"
+        )
+    dup = conn.execute(
+        "SELECT clave_gesdai FROM mappings_articulos WHERE cuenta_a3 = ?",
+        (cuenta_a3,),
+    ).fetchone()
+    if dup is not None:
+        raise CuentaDuplicadaError(
+            f"La cuenta {cuenta_a3} ya está asignada al artículo {dup[0]}"
+        )
+
+    ahora = _now_iso()
+    conn.execute(
+        """
+        INSERT INTO mappings_articulos
+            (clave_gesdai, descripcion, cuenta_a3, es_texto_libre,
+             notas, revisado, fecha_revision, fecha_creacion, origen)
+        VALUES (?, ?, ?, 0, ?, 1, ?, ?, ?)
+        """,
+        (clave, descripcion, cuenta_a3, notas, ahora, ahora, ORIGEN_MANUAL),
+    )
+
+
+def crear_cliente_manual(
+    conn: sqlite3.Connection,
+    codigo: str,
+    nombre: str,
+    subcuenta_a3: str,
+    nif: str | None = None,
+    notas: str | None = None,
+) -> None:
+    """Inserta un cliente manual ya revisado. Lanza si el código existe.
+
+    El `nif` es opcional pero recomendado: el Resolver lo usa para casar
+    facturas GESDAI cuyo cliente no tiene subcuenta propia con este cliente
+    manual (ver `find_cliente_manual_por_nif`).
+    """
+    codigo = (codigo or '').strip()
+    nombre = (nombre or '').strip()
+    if not codigo:
+        raise ValueError("El código del cliente manual no puede estar vacío")
+    if not nombre:
+        raise ValueError("El nombre del cliente manual no puede estar vacío")
+    validar_subcuenta_cliente(subcuenta_a3)
+    nif_norm = (nif or '').strip() or None
+
+    if get_cliente_mapping(conn, codigo) is not None:
+        raise CodigoDuplicadoError(
+            f"Ya existe un cliente con código {codigo!r}"
+        )
+    dup = conn.execute(
+        "SELECT codigo_gesdai FROM mappings_clientes WHERE subcuenta_a3 = ?",
+        (subcuenta_a3,),
+    ).fetchone()
+    if dup is not None:
+        raise CuentaDuplicadaError(
+            f"La subcuenta {subcuenta_a3} ya está asignada al cliente {dup[0]}"
+        )
+
+    ahora = _now_iso()
+    conn.execute(
+        """
+        INSERT INTO mappings_clientes
+            (codigo_gesdai, nombre, nif, subcuenta_a3, notas,
+             revisado, fecha_revision, fecha_creacion, origen)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+        """,
+        (codigo, nombre, nif_norm, subcuenta_a3, notas, ahora, ahora, ORIGEN_MANUAL),
+    )
+
+
+def eliminar_articulo_manual(conn: sqlite3.Connection, clave: str) -> None:
+    """Borra un artículo manual. Lanza si no existe o si no es manual."""
+    fila = get_articulo_mapping(conn, clave)
+    if fila is None:
+        raise KeyError(f"Artículo no encontrado: {clave}")
+    if fila.get('origen') != ORIGEN_MANUAL:
+        raise OrigenInvalidoError(
+            f"El artículo {clave!r} proviene de GESDAI — bórralo desde GESDAI "
+            f"y re-sincroniza, no desde esta app."
+        )
+    conn.execute(
+        "DELETE FROM mappings_articulos WHERE clave_gesdai = ?", (clave,)
+    )
+
+
+def eliminar_cliente_manual(conn: sqlite3.Connection, codigo: str) -> None:
+    """Borra un cliente manual. Lanza si no existe o si no es manual."""
+    fila = get_cliente_mapping(conn, codigo)
+    if fila is None:
+        raise KeyError(f"Cliente no encontrado: {codigo}")
+    if fila.get('origen') != ORIGEN_MANUAL:
+        raise OrigenInvalidoError(
+            f"El cliente {codigo!r} proviene de GESDAI — bórralo desde GESDAI "
+            f"y re-sincroniza, no desde esta app."
+        )
+    conn.execute(
+        "DELETE FROM mappings_clientes WHERE codigo_gesdai = ?", (codigo,)
+    )
+
+
+def find_cliente_manual_por_nif(
+    conn: sqlite3.Connection,
+    nif: str,
+) -> dict | None:
+    """Devuelve el cliente manual con ese NIF y subcuenta asignada, o None.
+
+    Comparación case-insensitive y sin espacios. Si hay más de uno (no
+    debería pasar — el NIF identifica unívocamente a una persona/empresa
+    en a3ASESOR), se devuelve el de menor `codigo_gesdai` para que el
+    comportamiento sea determinista.
+    """
+    nif_norm = (nif or '').strip().upper()
+    if not nif_norm:
+        return None
+    row = conn.execute(
+        """
+        SELECT * FROM mappings_clientes
+        WHERE origen = ?
+          AND subcuenta_a3 IS NOT NULL
+          AND subcuenta_a3 != ''
+          AND UPPER(TRIM(COALESCE(nif, ''))) = ?
+        ORDER BY codigo_gesdai
+        LIMIT 1
+        """,
+        (ORIGEN_MANUAL, nif_norm),
+    ).fetchone()
+    return _row_to_dict(row)

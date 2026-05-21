@@ -23,6 +23,7 @@ from enum import Enum
 
 from app.mapping.keywords import Keyword, load_keywords, match
 from app.mapping.store import (
+    find_cliente_manual_por_nif,
     get_articulo_mapping,
     get_cliente_mapping,
     upsert_articulo_mapping,
@@ -136,9 +137,16 @@ class Resolver:
     def resolver_cliente(self, codigo: str) -> ResolucionCliente:
         """Devuelve la subcuenta 430XXX + nombre del cliente.
 
+        Pipeline:
+          1. Mapping directo de GESDAI con subcuenta asignada → usa esa.
+          2. Si no hay subcuenta pero el cliente GESDAI tiene NIF, buscar
+             un cliente manual (origen='manual') con el mismo NIF y
+             subcuenta asignada → usa la del manual. Útil cuando el
+             cliente vive en a3ASESOR pero no como ficha propia en GESDAI.
+
         Lanza `ClienteSinSubcuentaError` si:
           - el cliente no existe en mappings_clientes (no sincronizado)
-          - el cliente existe pero `subcuenta_a3` es NULL o vacía
+          - no tiene subcuenta y ningún cliente manual casa por NIF
 
         Esto produce un 🔴 rojo en el semáforo y bloquea exportación.
         """
@@ -149,11 +157,21 @@ class Resolver:
                 f"Sincroniza el catálogo desde GESDAI antes de exportar."
             )
         subcuenta = fila['subcuenta_a3']
-        if not subcuenta:
-            raise ClienteSinSubcuentaError(
-                f"Cliente {codigo!r} ({fila['nombre']}) sin subcuenta asignada"
+        if subcuenta:
+            return ResolucionCliente(
+                subcuenta_a3=subcuenta,
+                nombre=fila['nombre'],
             )
-        return ResolucionCliente(
-            subcuenta_a3=subcuenta,
-            nombre=fila['nombre'],
+
+        nif = (fila['nif'] or '').strip()
+        if nif:
+            manual = find_cliente_manual_por_nif(self.conn, nif)
+            if manual is not None:
+                return ResolucionCliente(
+                    subcuenta_a3=manual['subcuenta_a3'],
+                    nombre=manual['nombre'],
+                )
+
+        raise ClienteSinSubcuentaError(
+            f"Cliente {codigo!r} ({fila['nombre']}) sin subcuenta asignada"
         )

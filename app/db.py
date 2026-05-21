@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS mappings_clientes (
     auto_matched    INTEGER NOT NULL DEFAULT 0,
     notas           TEXT,
     fecha_creacion  TEXT NOT NULL,
-    fecha_revision  TEXT
+    fecha_revision  TEXT,
+    origen          TEXT NOT NULL DEFAULT 'gesdai'
 );
 
 CREATE TABLE IF NOT EXISTS mappings_articulos (
@@ -77,7 +78,8 @@ CREATE TABLE IF NOT EXISTS mappings_articulos (
     revisado        INTEGER NOT NULL DEFAULT 0,
     notas           TEXT,
     fecha_creacion  TEXT NOT NULL,
-    fecha_revision  TEXT
+    fecha_revision  TEXT,
+    origen          TEXT NOT NULL DEFAULT 'gesdai'
 );
 
 CREATE TABLE IF NOT EXISTS keywords_articulos (
@@ -239,10 +241,32 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         "SELECT valor FROM config WHERE clave = 'schema_version'"
     ).fetchone()
     current = int(row[0]) if row else 0
-    if current < SCHEMA_VERSION:
-        log.info("Migrando esquema %d → %d", current, SCHEMA_VERSION)
-        # Aquí irán las migraciones por versión cuando aparezcan.
-        conn.execute(
-            "UPDATE config SET valor = ? WHERE clave = 'schema_version'",
-            (str(SCHEMA_VERSION),),
-        )
+    if current >= SCHEMA_VERSION:
+        return
+
+    log.info("Migrando esquema %d → %d", current, SCHEMA_VERSION)
+
+    if current < 3:
+        _migrate_v2_add_origen(conn)
+
+    conn.execute(
+        "UPDATE config SET valor = ? WHERE clave = 'schema_version'",
+        (str(SCHEMA_VERSION),),
+    )
+
+
+def _migrate_v2_add_origen(conn: sqlite3.Connection) -> None:
+    """v2: columna `origen` en mappings_articulos y mappings_clientes.
+
+    Valores: 'gesdai' (proviene de sync_*, por defecto en filas existentes) y
+    'manual' (creada por el operador desde la UI sin existir en GESDAI).
+    Necesaria para distinguir filas eliminables (manuales) de las que sólo
+    GESDAI puede crear/borrar, y para el match cliente-por-NIF del Resolver.
+    """
+    for tabla in ('mappings_articulos', 'mappings_clientes'):
+        cols = {row[1] for row in conn.execute(f"PRAGMA table_info({tabla})").fetchall()}
+        if 'origen' not in cols:
+            conn.execute(
+                f"ALTER TABLE {tabla} "
+                "ADD COLUMN origen TEXT NOT NULL DEFAULT 'gesdai'"
+            )
