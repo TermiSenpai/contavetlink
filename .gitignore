@@ -10,6 +10,11 @@ exports/
 *.DAT
 *.dat
 
+# Datos tabulares de COLVET (mappings, conciliaciones, catálogos contables reales)
+*.csv
+*.xlsx
+*.xls
+
 # --- SQLite del intermediario ---
 *.db
 *.sqlite

@@ -190,7 +190,7 @@ def seed_default_settings(conn: sqlite3.Connection, env: str) -> None:
     Las claves que ya tienen valor NUNCA se sobreescriben — esta función es
     100% idempotente y respeta cualquier configuración del usuario.
 
-    En desarrollo, si el proyecto contiene una carpeta `DATA_DEV/` en la raíz,
+    En desarrollo, si el proyecto contiene una carpeta `tests/data/DATA_DEV/`,
     se usa como `dbf_path` por defecto para que arrancar de cero "just works".
     En producción no se siembra nada — el usuario configura desde la UI.
     """
@@ -199,10 +199,12 @@ def seed_default_settings(conn: sqlite3.Connection, env: str) -> None:
     }
 
     if SETTING_DBF_PATH not in existing and env == 'development':
-        dev_dbf = project_root() / 'DATA_DEV'
-        if dev_dbf.is_dir():
-            set_setting(conn, SETTING_DBF_PATH, str(dev_dbf))
-            log.info("Seed dev: dbf_path → %s", dev_dbf)
+        root = project_root()
+        for candidate in (root / 'tests' / 'data' / 'DATA_DEV', root / 'DATA_DEV'):
+            if candidate.is_dir():
+                set_setting(conn, SETTING_DBF_PATH, str(candidate))
+                log.info("Seed dev: dbf_path → %s", candidate)
+                break
 
 
 def get_db() -> sqlite3.Connection:

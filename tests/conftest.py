@@ -58,18 +58,18 @@ def data_dev_dir() -> Path:
     """Devuelve la ruta al DATA_DEV local. Si no existe, skip del test.
 
     Busca en orden:
-      1. <project_root>/DATA_DEV   (carpeta principal usada en dev)
-      2. <repo>/tests/data/DATA_DEV  (alternativa para datos sintéticos)
+      1. <repo>/tests/data/DATA_DEV  (ubicación canónica)
+      2. <project_root>/DATA_DEV     (legacy, fallback)
     """
     project_root = Path(__file__).resolve().parent.parent
     candidates = [
-        project_root / 'DATA_DEV',
         project_root / 'tests' / 'data' / 'DATA_DEV',
+        project_root / 'DATA_DEV',
     ]
     for path in candidates:
         if path.is_dir() and any(path.iterdir()):
             return path
     pytest.skip(
-        "DATA_DEV/ no encontrado — coloca DBFs en ./DATA_DEV o "
+        "DATA_DEV/ no encontrado — coloca DBFs en tests/data/DATA_DEV/ o "
         "genera sintéticos con scripts/generate_dev_data.py"
     )
